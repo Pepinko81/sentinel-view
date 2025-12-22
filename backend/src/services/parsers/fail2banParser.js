@@ -17,6 +17,7 @@ const defaultJailStatus = {
   name: null,
   enabled: false,
   bannedIPs: [],
+  bannedCount: 0, // Add bannedCount field
   filter: null,
   maxRetry: null,
   banTime: null,
@@ -178,19 +179,24 @@ function parseJailStatus(output, jailName) {
     bannedIPs: [],
   };
   
-  // Track if we found banned IP section
-  let inBannedIPSection = false;
-  let ipLines = [];
+  // Track banned count from "Currently banned" (source of truth)
+  let currentlyBannedCount = 0;
+  let bannedIPListLine = null;
   
   for (const line of lines) {
-    // Parse enabled status - multiple indicators
+    // Parse "Currently banned" - THIS IS THE SOURCE OF TRUTH for banned count
+    // Format: "Currently banned:\t1" or "Currently banned: 1"
     if (line.toLowerCase().includes('currently banned')) {
-      const match = line.match(/currently\s+banned[:\s]+(\d+)/i);
+      // Remove leading symbols (|, -, `, spaces, tabs)
+      const cleaned = line.replace(/^[`|\-|\s\t]+/, '').trim();
+      // Match: "Currently banned:" followed by tab/space/colon and number
+      const match = cleaned.match(/currently\s+banned[:\s\t]+(\d+)/i);
       if (match) {
-        result.enabled = true;
-      } else {
-        // Just presence of this line might indicate enabled
-        result.enabled = true;
+        currentlyBannedCount = parseInt(match[1], 10);
+        result.enabled = true; // If there are banned IPs, jail is enabled
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[JAIL PARSER] ${jailName}: Currently banned = ${currentlyBannedCount}`);
+        }
       }
     }
     
@@ -230,50 +236,75 @@ function parseJailStatus(output, jailName) {
       }
     }
     
-    // Parse banned IPs - improved multiline handling
-    if (line.toLowerCase().includes('banned ip list') || 
-        line.toLowerCase().includes('currently banned')) {
-      inBannedIPSection = true;
+    // Parse "Banned IP list" - extract IP addresses
+    // Format: "Banned IP list:\t66.249.79.1" or "`- Banned IP list: 66.249.79.1"
+    if (line.toLowerCase().includes('banned ip list')) {
+      bannedIPListLine = line;
+    }
+  }
+  
+  // Parse banned IP list if found
+  if (bannedIPListLine) {
+    // Remove leading symbols (|, -, `, spaces, tabs)
+    const cleaned = bannedIPListLine.replace(/^[`|\-|\s\t]+/, '').trim();
+    // Match: "Banned IP list:" followed by tab/space/colon and IPs (comma-separated or single)
+    const match = cleaned.match(/banned\s+ip\s+list[:\s\t]+(.+)/i);
+    
+    if (match && match[1]) {
+      const ipListStr = match[1].trim();
       
-      // Extract IPs from same line
-      const sameLineIPs = extractIPs(line);
-      if (sameLineIPs.length > 0) {
-        ipLines.push(...sameLineIPs);
-      }
-      
-      // Continue collecting IPs from following lines
-      const lineIdx = lines.indexOf(line);
-      for (let j = lineIdx + 1; j < Math.min(lineIdx + 10, lines.length); j++) {
-        const nextLine = lines[j];
-        // Stop if we hit a new section (starts with capital letter or colon)
-        if (nextLine && /^[A-Z]/.test(nextLine) && nextLine.includes(':')) {
-          break;
+      // Extract IPs - handle comma-separated or single IP
+      if (ipListStr && ipListStr.length > 0) {
+        // Split by comma and extract IPs from each part
+        const ipParts = ipListStr.split(',');
+        const extractedIPs = [];
+        
+        for (const part of ipParts) {
+          const ips = extractIPs(part.trim());
+          extractedIPs.push(...ips);
         }
-        const nextLineIPs = extractIPs(nextLine);
-        if (nextLineIPs.length > 0) {
-          ipLines.push(...nextLineIPs);
-        } else if (nextLine.trim() === '' || nextLine.includes('---')) {
-          // Empty line or separator indicates end of IP list
-          break;
+        
+        result.bannedIPs = [...new Set(extractedIPs)];
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[JAIL PARSER] ${jailName}: Extracted ${result.bannedIPs.length} IPs from Banned IP list`);
         }
       }
     }
   }
   
-  // Deduplicate IPs and assign
-  result.bannedIPs = [...new Set(ipLines)];
-  
-  // If we have banned IPs, jail is definitely enabled
-  if (result.bannedIPs.length > 0) {
+  // CRITICAL: Use "Currently banned" as source of truth
+  // If "Currently banned" > 0, we MUST have a count > 0
+  // Even if IP list parsing failed, we know there are banned IPs
+  if (currentlyBannedCount > 0) {
     result.enabled = true;
+    
+    // If we couldn't parse IPs but count > 0, log warning but keep count
+    if (result.bannedIPs.length === 0 && currentlyBannedCount > 0) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`[JAIL PARSER] ${jailName}: Currently banned = ${currentlyBannedCount} but parsed 0 IPs. IP list may be empty or parsing failed.`);
+      }
+      // Don't set bannedIPs to empty - keep it as [] but count is correct
+    }
+    
+    // Validate: parsed IP count should match "Currently banned" (if IPs were parsed)
+    if (result.bannedIPs.length > 0 && result.bannedIPs.length !== currentlyBannedCount) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`[JAIL PARSER] ${jailName}: IP count mismatch - Currently banned: ${currentlyBannedCount}, Parsed IPs: ${result.bannedIPs.length}`);
+      }
+    }
+  } else {
+    // If "Currently banned" = 0, there should be no IPs
+    result.bannedIPs = [];
   }
   
-  // If no banned IPs found but jail exists, it might still be enabled
-  // Check for other indicators
+  // If filter exists, jail is likely enabled
   if (result.filter && !result.enabled) {
-    // If filter exists, assume enabled unless explicitly disabled
     result.enabled = true;
   }
+  
+  // Add banned count to result (for API response)
+  result.bannedCount = currentlyBannedCount;
   
   result.errors = errors;
   return result;

@@ -124,19 +124,28 @@ router.get('/', async (req, res, next) => {
     }
     
     // Transform monitor data to frontend format
-    const jails = (monitorData.jails || []).map(jail => ({
-      name: jail.name,
-      enabled: (jail.bannedIPs && jail.bannedIPs.length > 0) || (jail.bannedCount > 0) || false,
-      bannedIPs: (jail.bannedIPs || []).map(ip => ({
-        ip,
-        bannedAt: new Date().toISOString(),
-        banCount: 1,
-      })),
-      category: inferCategory(jail.name),
-      filter: jail.name,
-      maxRetry: null,
-      banTime: null,
-    }));
+    // CRITICAL: Use bannedCount as source of truth - if > 0, jail is enabled
+    const jails = (monitorData.jails || []).map(jail => {
+      const bannedCount = jail.bannedCount || 0;
+      const bannedIPs = jail.bannedIPs || [];
+      
+      // If bannedCount > 0 but no IPs parsed, jail is still enabled
+      const isEnabled = bannedCount > 0 || bannedIPs.length > 0;
+      
+      return {
+        name: jail.name,
+        enabled: isEnabled,
+        bannedIPs: bannedIPs.map(ip => ({
+          ip,
+          bannedAt: new Date().toISOString(),
+          banCount: 1,
+        })),
+        category: inferCategory(jail.name),
+        filter: jail.name,
+        maxRetry: null,
+        banTime: null,
+      };
+    });
     
     // Also include jails that might not have banned IPs but are configured
     const configuredJails = monitorData.fail2ban?.jails || [];
@@ -267,8 +276,11 @@ router.get('/:name', async (req, res, next) => {
     const jailData = (monitorData.jails || []).find(j => j.name === jailName);
     
     const category = inferCategory(jailName);
+    const bannedCount = jailData ? (jailData.bannedCount || 0) : 0;
     const bannedIPs = jailData ? (jailData.bannedIPs || []) : [];
-    const severity = inferSeverity(jailName, bannedIPs.length);
+    // Use bannedCount as source of truth - if > 0, jail is enabled
+    const isEnabled = bannedCount > 0 || bannedIPs.length > 0;
+    const severity = inferSeverity(jailName, bannedCount || bannedIPs.length);
     
     const bannedIPsFormatted = bannedIPs.map(ip => ({
       ip,
@@ -278,7 +290,7 @@ router.get('/:name', async (req, res, next) => {
     
     const rawResponse = {
       name: jailName,
-      enabled: bannedIPs.length > 0,
+      enabled: isEnabled,
       bannedIPs: bannedIPsFormatted,
       category,
       severity,

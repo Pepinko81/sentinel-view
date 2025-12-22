@@ -154,22 +154,42 @@ function parseMonitorOutput(output) {
     // Parse banned IPs section
     if (currentSection === 'banned_ips') {
       // Jail name with banned count - flexible regex
+      // Format: "nginx-hidden-files (1 блокирани):"
       const jailMatch = line.match(/([a-zA-Z0-9._-]+)\s*\((\d+)\s*блокирани?\)/i);
       if (jailMatch) {
+        const bannedCount = parseInt(jailMatch[2], 10);
         currentJail = {
           name: jailMatch[1],
-          bannedCount: parseInt(jailMatch[2], 10),
+          bannedCount: bannedCount, // Use parsed count as source of truth
           bannedIPs: [],
         };
         result.jails.push(currentJail);
-        result.fail2ban.totalBanned += currentJail.bannedCount;
+        result.fail2ban.totalBanned += bannedCount;
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[MONITOR PARSER] Found jail ${currentJail.name} with ${bannedCount} banned IPs`);
+        }
       }
       
-      // IP addresses (indented with spaces) - use extractIPs utility
-      if (currentJail && /^\s{2,}\d+\.\d+\.\d+\.\d+/.test(line)) {
+      // IP addresses (indented with spaces or tabs) - use extractIPs utility
+      // Format: "    66.249.79.1" or "    66.249.79.1, 192.168.1.1"
+      if (currentJail && (/^\s{2,}\d+\.\d+\.\d+\.\d+/.test(line) || /^\s{2,}[0-9.,\s]+/.test(line))) {
         const ips = extractIPs(line);
         if (ips.length > 0) {
           currentJail.bannedIPs.push(...ips);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[MONITOR PARSER] Extracted ${ips.length} IPs for ${currentJail.name}: ${ips.join(', ')}`);
+          }
+        }
+      }
+      
+      // CRITICAL: Ensure bannedCount matches parsed IPs if count > 0
+      // If bannedCount > 0 but no IPs parsed, log warning but keep count
+      if (currentJail && currentJail.bannedCount > 0 && currentJail.bannedIPs.length === 0) {
+        // Check if we're still in the IP section (might be parsing)
+        // But if we hit the next jail or section, we're done
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`[MONITOR PARSER] ${currentJail.name}: bannedCount = ${currentJail.bannedCount} but parsed 0 IPs. IP list may be empty or on next line.`);
         }
       }
       
