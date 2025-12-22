@@ -12,10 +12,24 @@ const config = {
   // Cache configuration
   cache: {
     defaultTTL: parseInt(process.env.CACHE_TTL) || 5000, // 5 seconds
-    overviewTTL: parseInt(process.env.CACHE_OVERVIEW_TTL) || 5000,
+    overviewTTL: parseInt(process.env.CACHE_OVERVIEW_TTL) || 10000, // 10 seconds (optimized for <300ms)
     jailsTTL: parseInt(process.env.CACHE_JAILS_TTL) || 5000,
     nginxTTL: parseInt(process.env.CACHE_NGINX_TTL) || 10000, // 10 seconds
     systemTTL: parseInt(process.env.CACHE_SYSTEM_TTL) || 30000, // 30 seconds
+  },
+  
+  // Performance configuration
+  performance: {
+    // Enable performance monitoring (default: true in dev, false in prod)
+    monitoring: process.env.PERFORMANCE_MONITORING !== undefined 
+      ? process.env.PERFORMANCE_MONITORING === 'true'
+      : process.env.NODE_ENV === 'development',
+    // Response time thresholds (ms)
+    slowRequestThreshold: parseInt(process.env.SLOW_REQUEST_THRESHOLD) || 300,
+    verySlowRequestThreshold: parseInt(process.env.VERY_SLOW_REQUEST_THRESHOLD) || 1000,
+    // Overview endpoint optimization
+    overviewMaxResponseTime: parseInt(process.env.OVERVIEW_MAX_RESPONSE_TIME) || 250,
+    overviewScriptTimeout: parseInt(process.env.OVERVIEW_SCRIPT_TIMEOUT) || 2000,
   },
   
   // Script execution

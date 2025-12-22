@@ -11,17 +11,27 @@ const cache = require('../services/cache');
 const config = require('../config/config');
 const os = require('os');
 
+// Performance constants
+const MAX_RESPONSE_TIME = 250; // ms - return cached if slower than this
+const SCRIPT_TIMEOUT = 2000; // 2s max for script execution (reduced from 30s)
+const CACHE_TTL = 10000; // 10 seconds (increased from 5s for better hit rate)
+const ERROR_CACHE_TTL = 5000; // 5 seconds for error responses
+
 /**
  * GET /api/overview
  * Returns summary + timestamp
  * Uses monitor-security.sh as the main data source
  * Handles fail2ban downtime gracefully with partial data
+ * Optimized for <300ms response time
  */
 router.get('/', async (req, res, next) => {
+  const startTime = Date.now();
+  
   try {
     const cacheKey = 'overview';
-    const cached = cache.get(cacheKey);
     
+    // Fast path: return cached immediately (<10ms)
+    const cached = cache.get(cacheKey);
     if (cached) {
       res.setHeader('X-API-Version', API_VERSION);
       return res.json(cached);
@@ -55,12 +65,59 @@ router.get('/', async (req, res, next) => {
       serverStatus: 'online',
     };
     
-    // Execute monitor-security.sh - this provides all data in one go
+    // Check for stale cache (even if expired, might be better than nothing)
+    const staleCacheKey = `${cacheKey}:stale`;
+    const staleCached = cache.get(staleCacheKey);
+    
+    // Execute script with aggressive timeout
     let monitorData = null;
     let scriptError = null;
+    let usedStaleCache = false;
     
     try {
-      const { stdout, stderr } = await executeScript('monitor-security.sh');
+      // Create timeout promise
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Script execution timeout')), SCRIPT_TIMEOUT)
+      );
+      
+      // Race between script execution and timeout
+      const scriptPromise = executeScript('monitor-security.sh');
+      
+      let scriptResult;
+      try {
+        scriptResult = await Promise.race([scriptPromise, timeoutPromise]);
+      } catch (timeoutErr) {
+        // Script took too long - use stale cache if available
+        if (staleCached) {
+          console.warn(`Script timeout (${SCRIPT_TIMEOUT}ms), using stale cache`);
+          usedStaleCache = true;
+          const response = staleCached;
+          cache.set(cacheKey, response, CACHE_TTL); // Re-cache stale data
+          res.setHeader('X-API-Version', API_VERSION);
+          return res.json(response);
+        }
+        
+        // No stale cache - return safe defaults quickly
+        const elapsed = Date.now() - startTime;
+        if (elapsed > MAX_RESPONSE_TIME) {
+          console.warn(`Response time exceeded ${MAX_RESPONSE_TIME}ms, returning defaults`);
+          const errorResponse = serializeOverviewResponse({
+            ...safeDefaults,
+            errors: ['Script execution timeout - service may be slow'],
+            partial: true,
+            serverStatus: 'degraded',
+          });
+          
+          // Cache error response with shorter TTL
+          cache.set(cacheKey, errorResponse, ERROR_CACHE_TTL);
+          res.setHeader('X-API-Version', API_VERSION);
+          return res.json(errorResponse);
+        }
+        
+        throw timeoutErr;
+      }
+      
+      const { stdout, stderr } = scriptResult;
       
       // Check for fail2ban errors in stderr
       const errorCheck = detectFail2banError(stdout, stderr);
@@ -81,6 +138,19 @@ router.get('/', async (req, res, next) => {
       console.error('Failed to execute monitor-security.sh:', err.message);
       scriptError = err.message;
       
+      // Check elapsed time - if we're already past threshold, return quickly
+      const elapsed = Date.now() - startTime;
+      
+      // Use stale cache if available and we're running slow
+      if (staleCached && elapsed > MAX_RESPONSE_TIME) {
+        console.warn('Using stale cache due to script failure and time constraint');
+        usedStaleCache = true;
+        const response = staleCached;
+        cache.set(cacheKey, response, CACHE_TTL);
+        res.setHeader('X-API-Version', API_VERSION);
+        return res.json(response);
+      }
+      
       // Return safe defaults with error (serialized)
       const errorResponse = serializeOverviewResponse({
         ...safeDefaults,
@@ -89,7 +159,7 @@ router.get('/', async (req, res, next) => {
         serverStatus: 'error',
       });
       
-      cache.set(cacheKey, errorResponse, config.cache.overviewTTL);
+      cache.set(cacheKey, errorResponse, ERROR_CACHE_TTL);
       res.setHeader('X-API-Version', API_VERSION);
       return res.json(errorResponse);
     }
@@ -158,7 +228,17 @@ router.get('/', async (req, res, next) => {
     // Serialize to ensure exact frontend schema match
     const response = serializeOverviewResponse(rawResponse);
     
-    cache.set(cacheKey, response, config.cache.overviewTTL);
+    // Cache response (save as stale cache too for fallback)
+    const ttl = response._partial ? ERROR_CACHE_TTL : CACHE_TTL;
+    cache.set(cacheKey, response, ttl);
+    cache.set(staleCacheKey, response, ttl * 2); // Keep stale cache longer
+    
+    // Check if we're still within response time target
+    const elapsed = Date.now() - startTime;
+    if (elapsed > MAX_RESPONSE_TIME && !usedStaleCache) {
+      console.warn(`Overview endpoint took ${elapsed}ms (target: <${MAX_RESPONSE_TIME}ms)`);
+    }
+    
     res.setHeader('X-API-Version', API_VERSION);
     res.json(response);
   } catch (err) {

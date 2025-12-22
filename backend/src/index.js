@@ -2,9 +2,12 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const config = require('./config/config');
+const corsOptions = require('./config/cors');
 const { authenticate } = require('./middleware/auth');
 const { errorHandler } = require('./middleware/errorHandler');
+const { performanceMonitor } = require('./middleware/performance');
 const { apiLimiter, backupLimiter } = require('./middleware/rateLimiter');
+const healthRoutes = require('./routes/health');
 const apiRoutes = require('./routes');
 
 // Validate configuration on startup (fail fast if secrets missing)
@@ -15,28 +18,24 @@ const app = express();
 // Security middleware
 app.use(helmet());
 
-// CORS configuration
-app.use(cors({
-  origin: config.corsOrigin,
-  credentials: true,
-}));
+// CORS configuration (secure, explicit origins)
+app.use(cors(corsOptions));
 
 // Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Performance monitoring (if enabled)
+if (config.performance.monitoring) {
+  app.use(performanceMonitor);
+}
+
 // Rate limiting - per-IP tracking
 // This prevents DoS attacks and reduces system load from excessive sudo calls
 app.use('/api', apiLimiter);
 
-// Health check endpoint (no auth required)
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
-});
+// Health check endpoint (no auth required, comprehensive status)
+app.use('/health', healthRoutes);
 
 // API routes (require authentication)
 app.use('/api', authenticate, apiRoutes);
@@ -60,11 +59,16 @@ app.listen(PORT, () => {
   console.log(`📊 Environment: ${config.nodeEnv}`);
   console.log(`🔒 Authentication: ${config.authToken ? 'Enabled' : 'Disabled (WARNING!)'}`);
   console.log(`📁 Scripts directory: ${config.scriptsDir}`);
+  console.log(`🌐 CORS Origin: ${config.corsOrigin}`);
+  
+  if (config.performance.monitoring) {
+    console.log(`⚡ Performance monitoring: Enabled`);
+  }
   
   if (config.nodeEnv === 'development') {
     console.log(`\n📝 API Endpoints:`);
-    console.log(`   GET  /health`);
-    console.log(`   GET  /api/overview`);
+    console.log(`   GET  /health (enhanced health check)`);
+    console.log(`   GET  /api/overview (optimized for <300ms)`);
     console.log(`   GET  /api/jails`);
     console.log(`   GET  /api/jails/:name`);
     console.log(`   GET  /api/nginx`);
@@ -85,4 +89,3 @@ process.on('SIGINT', () => {
 });
 
 module.exports = app;
-
