@@ -45,7 +45,7 @@ router.get('/', async (req, res, next) => {
       // Extract nginx stats from monitor data
       if (monitorData.nginx) {
         stats = {
-          404_count: monitorData.nginx.errors404 || 0,
+          '404_count': monitorData.nginx.errors404 || 0,
           admin_scans: monitorData.nginx.adminScans || 0,
           webdav_attacks: monitorData.nginx.webdavAttacks || 0,
           hidden_files_attempts: monitorData.nginx.hiddenFilesAttacks || 0,

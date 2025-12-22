@@ -1,11 +1,13 @@
 import { useState, useMemo } from "react";
-import { Shield } from "lucide-react";
+import { Shield, AlertCircle, RefreshCw } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { JailTable } from "@/components/jails/JailTable";
 import { JailFilters } from "@/components/jails/JailFilters";
 import { RefreshIndicator } from "@/components/dashboard/RefreshIndicator";
 import { useJails } from "@/hooks/useJails";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function Jails() {
   const {
@@ -14,6 +16,8 @@ export default function Jails() {
     lastUpdated,
     isLoading,
     isRefetching,
+    isError,
+    error,
     refetch,
     unbanIP,
     toggleJail,
@@ -80,27 +84,78 @@ export default function Jails() {
           )}
         </div>
 
-        {/* Filters */}
-        <JailFilters
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          categoryFilter={categoryFilter}
-          onCategoryChange={setCategoryFilter}
-          statusFilter={statusFilter}
-          onStatusChange={setStatusFilter}
-          categories={stats?.categories ?? []}
-        />
+        {/* Error State */}
+        {isError && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Failed to load jails</AlertTitle>
+            <AlertDescription className="mt-2">
+              <p className="mb-2">
+                {error instanceof Error ? error.message : "Unable to connect to the backend API."}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetch()}
+                disabled={isRefetching}
+                className="mt-2"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Filters - Only show if not loading and not error */}
+        {!isLoading && !isError && (
+          <JailFilters
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            categoryFilter={categoryFilter}
+            onCategoryChange={setCategoryFilter}
+            statusFilter={statusFilter}
+            onStatusChange={setStatusFilter}
+            categories={stats?.categories ?? []}
+          />
+        )}
 
         {/* Results count */}
-        <div className="font-mono text-xs text-muted-foreground">
-          Showing {filteredJails.length} of {jails.length} jails
-        </div>
+        {!isLoading && !isError && (
+          <div className="font-mono text-xs text-muted-foreground">
+            Showing {filteredJails.length} of {jails.length} jails
+          </div>
+        )}
 
         {/* Jails Table */}
         {isLoading ? (
           <div className="space-y-4">
             <Skeleton className="h-12 bg-muted/50" />
             <Skeleton className="h-64 bg-muted/50" />
+          </div>
+        ) : isError ? (
+          // Empty state when error
+          <div className="terminal-card p-6">
+            <div className="scanlines" />
+            <div className="relative z-10 text-center text-muted-foreground">
+              <p className="font-mono text-sm">Unable to load jails data</p>
+            </div>
+          </div>
+        ) : jails.length === 0 ? (
+          // Empty state when no jails
+          <div className="terminal-card p-6">
+            <div className="scanlines" />
+            <div className="relative z-10 text-center text-muted-foreground">
+              <p className="font-mono text-sm">No jails configured</p>
+            </div>
+          </div>
+        ) : filteredJails.length === 0 ? (
+          // Empty state when filters match nothing
+          <div className="terminal-card p-6">
+            <div className="scanlines" />
+            <div className="relative z-10 text-center text-muted-foreground">
+              <p className="font-mono text-sm">No jails match the current filters</p>
+            </div>
           </div>
         ) : categoryFilter !== "all" || searchQuery ? (
           // Flat list when filtering

@@ -1,12 +1,14 @@
-import { Shield, ShieldAlert, ShieldCheck, ShieldOff, Activity } from "lucide-react";
+import { Shield, ShieldAlert, ShieldCheck, ShieldOff, Activity, AlertCircle, RefreshCw } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { RefreshIndicator } from "@/components/dashboard/RefreshIndicator";
 import { useJails } from "@/hooks/useJails";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function Dashboard() {
-  const { stats, lastUpdated, serverStatus, isLoading, isRefetching, refetch } =
+  const { stats, lastUpdated, serverStatus, isLoading, isRefetching, isError, error, refetch } =
     useJails();
 
   return (
@@ -48,6 +50,29 @@ export default function Dashboard() {
           </span>
         </div>
 
+        {/* Error State */}
+        {isError && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Failed to load data</AlertTitle>
+            <AlertDescription className="mt-2">
+              <p className="mb-2">
+                {error instanceof Error ? error.message : "Unable to connect to the backend API."}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetch()}
+                disabled={isRefetching}
+                className="mt-2"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Stats Grid */}
         {isLoading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -57,6 +82,38 @@ export default function Dashboard() {
                 className="h-32 bg-muted/50"
               />
             ))}
+          </div>
+        ) : isError ? (
+          // Show empty state when error
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              title="Total Banned IPs"
+              value={0}
+              icon={ShieldAlert}
+              description="Data unavailable"
+              variant="default"
+            />
+            <StatCard
+              title="Active Jails"
+              value={0}
+              icon={Shield}
+              description="Data unavailable"
+              variant="default"
+            />
+            <StatCard
+              title="Enabled Jails"
+              value={0}
+              icon={ShieldCheck}
+              description="Data unavailable"
+              variant="default"
+            />
+            <StatCard
+              title="Disabled Jails"
+              value={0}
+              icon={ShieldOff}
+              description="Data unavailable"
+              variant="default"
+            />
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -92,7 +149,7 @@ export default function Dashboard() {
         )}
 
         {/* Categories */}
-        {stats && stats.categories.length > 0 && (
+        {!isError && stats && stats.categories.length > 0 && (
           <div className="terminal-card p-6">
             <div className="scanlines" />
             <div className="relative z-10">
@@ -116,30 +173,42 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* System Info */}
-        <div className="terminal-card p-6">
-          <div className="scanlines" />
-          <div className="relative z-10 font-mono text-xs text-muted-foreground">
-            <div className="space-y-1">
-              <p>
-                <span className="text-primary">$</span> fail2ban-client status
-              </p>
-              <p className="pl-4">
-                Status: <span className="text-success">OK</span>
-              </p>
-              <p className="pl-4">
-                Number of jails:{" "}
-                <span className="text-foreground">{stats?.activeJails ?? 0}</span>
-              </p>
-              <p className="pl-4">
-                Total banned:{" "}
-                <span className="text-destructive">
-                  {stats?.totalBannedIPs ?? 0}
-                </span>
-              </p>
+        {/* Empty State - No Categories */}
+        {!isLoading && !isError && stats && stats.categories.length === 0 && (
+          <div className="terminal-card p-6">
+            <div className="scanlines" />
+            <div className="relative z-10 text-center text-muted-foreground">
+              <p className="font-mono text-sm">No active categories found</p>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* System Info */}
+        {!isError && (
+          <div className="terminal-card p-6">
+            <div className="scanlines" />
+            <div className="relative z-10 font-mono text-xs text-muted-foreground">
+              <div className="space-y-1">
+                <p>
+                  <span className="text-primary">$</span> fail2ban-client status
+                </p>
+                <p className="pl-4">
+                  Status: <span className={serverStatus === "online" ? "text-success" : "text-destructive"}>{serverStatus === "online" ? "OK" : "OFFLINE"}</span>
+                </p>
+                <p className="pl-4">
+                  Number of jails:{" "}
+                  <span className="text-foreground">{stats?.activeJails ?? 0}</span>
+                </p>
+                <p className="pl-4">
+                  Total banned:{" "}
+                  <span className="text-destructive">
+                    {stats?.totalBannedIPs ?? 0}
+                  </span>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </MainLayout>
   );

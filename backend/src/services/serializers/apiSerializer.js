@@ -133,7 +133,7 @@ function serializeOverviewResponse(data) {
       server: { hostname: '', uptime: '' },
       summary: { active_jails: 0, total_banned_ips: 0 },
       jails: [],
-      nginx: { 404_count: 0, admin_scans: 0, webdav_attacks: 0, hidden_files_attempts: 0 },
+      nginx: { '404_count': 0, admin_scans: 0, webdav_attacks: 0, hidden_files_attempts: 0 },
       system: { memory: 'N/A', disk: 'N/A', load: 'N/A' },
     };
   }
@@ -151,12 +151,12 @@ function serializeOverviewResponse(data) {
     jails: Array.isArray(data.jails) 
       ? data.jails.map(serializeJail)
       : [],
-    nginx: {
-      404_count: typeof data.nginx?.404_count === 'number' ? data.nginx.404_count : 0,
-      admin_scans: typeof data.nginx?.admin_scans === 'number' ? data.nginx.admin_scans : 0,
-      webdav_attacks: typeof data.nginx?.webdav_attacks === 'number' ? data.nginx.webdav_attacks : 0,
-      hidden_files_attempts: typeof data.nginx?.hidden_files_attempts === 'number' ? data.nginx.hidden_files_attempts : 0,
-    },
+      nginx: {
+        '404_count': typeof data.nginx?.['404_count'] === 'number' ? data.nginx['404_count'] : 0,
+        admin_scans: typeof data.nginx?.admin_scans === 'number' ? data.nginx.admin_scans : 0,
+        webdav_attacks: typeof data.nginx?.webdav_attacks === 'number' ? data.nginx.webdav_attacks : 0,
+        hidden_files_attempts: typeof data.nginx?.hidden_files_attempts === 'number' ? data.nginx.hidden_files_attempts : 0,
+      },
     system: {
       memory: String(data.system?.memory || 'N/A'),
       disk: String(data.system?.disk || 'N/A'),
@@ -224,7 +224,7 @@ function serializeJailResponse(data) {
 function serializeNginxResponse(data) {
   if (!data || typeof data !== 'object') {
     return {
-      404_count: 0,
+      '404_count': 0,
       admin_scans: 0,
       webdav_attacks: 0,
       hidden_files_attempts: 0,
@@ -232,10 +232,10 @@ function serializeNginxResponse(data) {
   }
   
   const response = {
-    404_count: typeof data.404_count === 'number' ? data.404_count : 0,
-    admin_scans: typeof data.admin_scans === 'number' ? data.admin_scans : 0,
-    webdav_attacks: typeof data.webdav_attacks === 'number' ? data.webdav_attacks : 0,
-    hidden_files_attempts: typeof data.hidden_files_attempts === 'number' ? data.hidden_files_attempts : 0,
+   '404_count': typeof data['404_count'] === 'number' ? data['404_count'] : 0,
+   admin_scans: typeof data.admin_scans === 'number' ? data.admin_scans : 0,
+   webdav_attacks: typeof data.webdav_attacks === 'number' ? data.webdav_attacks : 0,
+   hidden_files_attempts: typeof data.hidden_files_attempts === 'number' ? data.hidden_files_attempts : 0,
   };
   
   // Add backend-only fields

@@ -4,7 +4,7 @@ const { findValueAfterAnchor, validateOutput } = require('./parserUtils');
  * Safe defaults for nginx statistics
  */
 const defaultNginxStats = {
-  404_count: 0,
+  '404_count': 0,
   admin_scans: 0,
   webdav_attacks: 0,
   hidden_files_attempts: 0,
@@ -43,7 +43,7 @@ function parseNginxStats(output) {
         line.toLowerCase().includes('404')) {
       const count = findValueAfterAnchor(lines, line, 3);
       if (count !== null) {
-        result.404_count = count;
+        result['404_count'] = count;
       }
     }
     

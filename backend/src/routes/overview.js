@@ -50,7 +50,7 @@ router.get('/', async (req, res, next) => {
       },
       jails: [],
       nginx: {
-        404_count: 0,
+        '404_count': 0,
         admin_scans: 0,
         webdav_attacks: 0,
         hidden_files_attempts: 0,
@@ -210,7 +210,7 @@ router.get('/', async (req, res, next) => {
         banTime: null,
       })),
       nginx: {
-        404_count: monitorData.nginx?.errors404 || 0,
+        '404_count': monitorData.nginx?.errors404 || 0,
         admin_scans: monitorData.nginx?.adminScans || 0,
         webdav_attacks: monitorData.nginx?.webdavAttacks || 0,
         hidden_files_attempts: monitorData.nginx?.hiddenFilesAttacks || 0,

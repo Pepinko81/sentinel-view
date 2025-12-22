@@ -26,8 +26,10 @@ function getAllowedOrigins() {
     'http://localhost:5173',  // Vite default
     'http://localhost:3000',   // Common React dev server
     'http://localhost:5174',   // Vite alternative port
+    'http://localhost:8080',   // Alternative Vite port
     'http://127.0.0.1:5173',
     'http://127.0.0.1:3000',
+    'http://127.0.0.1:8080',
   ];
   
   // Add custom origin if provided

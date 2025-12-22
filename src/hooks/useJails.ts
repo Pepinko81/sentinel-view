@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchJails, unbanIP, toggleJail, banIP, calculateStats } from "@/lib/mockApi";
+import { fetchJails, unbanIP, toggleJail, banIP, calculateStats } from "@/lib/apiService";
 import { useToast } from "@/hooks/use-toast";
 
 const REFRESH_INTERVAL = 30000; // 30 seconds
@@ -13,6 +13,8 @@ export const useJails = () => {
     queryFn: fetchJails,
     refetchInterval: REFRESH_INTERVAL,
     staleTime: REFRESH_INTERVAL - 5000,
+    retry: 2, // Retry failed requests 2 times
+    retryDelay: 1000, // Wait 1 second between retries
   });
 
   const stats = query.data ? calculateStats(query.data.jails) : null;
@@ -27,10 +29,10 @@ export const useJails = () => {
         description: `Successfully unbanned ${ip}`,
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to unban IP",
+        description: error.message || "Failed to unban IP",
         variant: "destructive",
       });
     },
@@ -45,10 +47,10 @@ export const useJails = () => {
         description: `${jailName} status changed`,
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to toggle jail",
+        description: error.message || "Failed to toggle jail",
         variant: "destructive",
       });
     },
@@ -64,10 +66,10 @@ export const useJails = () => {
         description: `Successfully banned ${ip}`,
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to ban IP",
+        description: error.message || "Failed to ban IP",
         variant: "destructive",
       });
     },
@@ -80,6 +82,8 @@ export const useJails = () => {
     stats,
     isLoading: query.isLoading,
     isRefetching: query.isRefetching,
+    isError: query.isError,
+    error: query.error,
     refetch: query.refetch,
     unbanIP: unbanMutation.mutate,
     toggleJail: toggleMutation.mutate,
