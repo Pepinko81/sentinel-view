@@ -37,10 +37,19 @@ npm install
 
 2. **Configure environment:**
 
+**Development:**
 ```bash
-cp .env.example .env
-# Edit .env and set AUTH_TOKEN to a secure random value
+cp .env.development.example .env.development
+# Edit .env.development and set AUTH_TOKEN and SCRIPTS_DIR
 ```
+
+**Production:**
+```bash
+cp .env.production.example .env.production
+# Edit .env.production and set all required variables
+```
+
+See `docs/ENVIRONMENT-CONFIG.md` for detailed configuration guide.
 
 3. **Make scripts executable:**
 
@@ -91,14 +100,28 @@ AUTH_TOKEN=your-generated-token-here
 
 ### Environment Variables
 
-See `.env.example` for all available configuration options:
+**Important**: All configuration is loaded from environment variables. No hardcoded paths are used.
 
-- `PORT`: Server port (default: 3001)
-- `AUTH_TOKEN`: Bearer token for API authentication
-- `CACHE_TTL`: Default cache TTL in milliseconds
-- `SCRIPTS_DIR`: Path to scripts directory (default: `/opt/fail2ban-dashboard/scripts`)
-- `NGINX_ACCESS_LOG`: Path to nginx access log
-- `CORS_ORIGIN`: Frontend URL for CORS
+**Required Variables**:
+- `AUTH_TOKEN`: Bearer token for API authentication (REQUIRED)
+- `SCRIPTS_DIR`: Path to scripts directory (REQUIRED, no default)
+
+**Environment Files**:
+- `.env.development` - Development configuration (warnings only)
+- `.env.production` - Production configuration (fails fast on errors)
+
+See `docs/ENVIRONMENT-CONFIG.md` for complete configuration guide.
+
+**Quick Setup**:
+```bash
+# Development
+cp .env.development.example .env.development
+# Edit .env.development and set AUTH_TOKEN and SCRIPTS_DIR
+
+# Production
+cp .env.production.example .env.production
+# Edit .env.production and set all required variables
+```
 
 ### Script Whitelist
 

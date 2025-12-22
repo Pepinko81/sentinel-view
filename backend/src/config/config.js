@@ -1,10 +1,17 @@
 require('dotenv').config();
 const path = require('path');
+const fs = require('fs');
+
+// Load environment-specific .env files
+const nodeEnv = process.env.NODE_ENV || 'development';
+if (fs.existsSync(path.join(__dirname, `../../.env.${nodeEnv}`))) {
+  require('dotenv').config({ path: path.join(__dirname, `../../.env.${nodeEnv}`) });
+}
 
 const config = {
   // Server configuration
   port: process.env.PORT || 3001,
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv: nodeEnv,
   
   // Authentication
   authToken: process.env.AUTH_TOKEN || process.env.API_TOKEN || 'change-me-in-production',
@@ -34,8 +41,13 @@ const config = {
   
   // Script execution
   scriptTimeout: parseInt(process.env.SCRIPT_TIMEOUT) || 30000, // 30 seconds
-  // Use actual server scripts directory
-  scriptsDir: process.env.SCRIPTS_DIR || path.join(__dirname, '../../../opt/fail2ban-dashboard/scripts'),
+  
+  // Scripts directory - STRICTLY from environment variable (no hardcoded defaults)
+  scriptsDir: process.env.SCRIPTS_DIR || null,
+  
+  // Fail2ban availability flag
+  fail2banAvailable: process.env.FAIL2BAN_AVAILABLE === 'true' || 
+                      (process.env.FAIL2BAN_AVAILABLE === undefined && nodeEnv === 'production'),
   
   // Sudo configuration
   sudoUser: process.env.SUDO_USER || null, // null = current user
@@ -56,12 +68,14 @@ const config = {
 
 /**
  * Validate configuration on startup
- * Fails fast if required environment variables are missing
+ * - Warns in development (non-fatal)
+ * - Fails fast in production (fatal)
  */
 function validateConfig() {
-  const required = ['AUTH_TOKEN', 'SCRIPTS_DIR'];
+  const required = ['AUTH_TOKEN'];
   const missing = [];
   const warnings = [];
+  const errors = [];
   
   // Check required variables
   required.forEach(key => {
@@ -78,12 +92,66 @@ function validateConfig() {
     }
   }
   
-  // Check SCRIPTS_DIR
-  if (!config.scriptsDir || config.scriptsDir.includes('opt/fail2ban-dashboard/scripts')) {
-    // If using default path, check if it exists
-    const fs = require('fs');
-    if (!fs.existsSync(config.scriptsDir)) {
-      warnings.push(`SCRIPTS_DIR path does not exist: ${config.scriptsDir}`);
+  // Check SCRIPTS_DIR - REQUIRED (no hardcoded fallback)
+  if (!config.scriptsDir || config.scriptsDir.trim() === '') {
+    if (config.nodeEnv === 'production') {
+      errors.push('SCRIPTS_DIR is required in production and must be set in environment variables');
+    } else {
+      warnings.push('SCRIPTS_DIR not set - script execution will fail');
+    }
+  } else {
+    // Validate SCRIPTS_DIR path exists and is accessible
+    const scriptsDir = path.resolve(config.scriptsDir);
+    
+    if (!fs.existsSync(scriptsDir)) {
+      if (config.nodeEnv === 'production') {
+        errors.push(`SCRIPTS_DIR path does not exist: ${scriptsDir}`);
+      } else {
+        warnings.push(`SCRIPTS_DIR path does not exist: ${scriptsDir}`);
+      }
+    } else {
+      // Check if it's a directory
+      const stats = fs.statSync(scriptsDir);
+      if (!stats.isDirectory()) {
+        if (config.nodeEnv === 'production') {
+          errors.push(`SCRIPTS_DIR is not a directory: ${scriptsDir}`);
+        } else {
+          warnings.push(`SCRIPTS_DIR is not a directory: ${scriptsDir}`);
+        }
+      } else {
+        // Check if readable
+        try {
+          fs.accessSync(scriptsDir, fs.constants.R_OK);
+        } catch (err) {
+          if (config.nodeEnv === 'production') {
+            errors.push(`SCRIPTS_DIR is not readable: ${scriptsDir}`);
+          } else {
+            warnings.push(`SCRIPTS_DIR is not readable: ${scriptsDir}`);
+          }
+        }
+        
+        // Check for required scripts (non-fatal, just warning)
+        const requiredScripts = ['monitor-security.sh', 'quick-check.sh'];
+        const missingScripts = requiredScripts.filter(script => {
+          const scriptPath = path.join(scriptsDir, script);
+          return !fs.existsSync(scriptPath);
+        });
+        
+        if (missingScripts.length > 0) {
+          warnings.push(`Some required scripts are missing: ${missingScripts.join(', ')}`);
+        }
+      }
+    }
+  }
+  
+  // Check fail2ban availability
+  if (config.fail2banAvailable) {
+    // Try to detect if fail2ban-client is available
+    const { execSync } = require('child_process');
+    try {
+      execSync('which fail2ban-client', { stdio: 'ignore' });
+    } catch (err) {
+      warnings.push('FAIL2BAN_AVAILABLE=true but fail2ban-client not found in PATH');
     }
   }
   
@@ -101,6 +169,16 @@ function validateConfig() {
     process.exit(1);
   }
   
+  // Fail on errors in production
+  if (errors.length > 0) {
+    console.error('\n❌ Configuration errors (production mode):');
+    errors.forEach(error => {
+      console.error(`   - ${error}`);
+    });
+    console.error('\n💡 Fix these errors before starting in production\n');
+    process.exit(1);
+  }
+  
   // Warn about production defaults
   if (config.nodeEnv === 'production') {
     if (config.authToken === 'change-me-in-production') {
@@ -111,6 +189,11 @@ function validateConfig() {
     
     if (config.port === 3001) {
       warnings.push('Using default port 3001 in production');
+    }
+    
+    if (!config.scriptsDir) {
+      console.error('❌ SCRIPTS_DIR must be set in production!');
+      process.exit(1);
     }
   }
   
@@ -126,6 +209,11 @@ function validateConfig() {
   // Success message
   if (config.nodeEnv === 'development') {
     console.log('✅ Configuration validated successfully');
+    if (warnings.length > 0) {
+      console.log('   (Some warnings present - see above)');
+    }
+  } else {
+    console.log('✅ Configuration validated successfully');
   }
 }
 
@@ -133,4 +221,3 @@ function validateConfig() {
 config.validate = validateConfig;
 
 module.exports = config;
-

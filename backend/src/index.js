@@ -58,8 +58,9 @@ app.listen(PORT, () => {
   console.log(`🚀 Sentinel Backend API running on port ${PORT}`);
   console.log(`📊 Environment: ${config.nodeEnv}`);
   console.log(`🔒 Authentication: ${config.authToken ? 'Enabled' : 'Disabled (WARNING!)'}`);
-  console.log(`📁 Scripts directory: ${config.scriptsDir}`);
+  console.log(`📁 Scripts directory: ${config.scriptsDir || '(not configured)'}`);
   console.log(`🌐 CORS Origin: ${config.corsOrigin}`);
+  console.log(`🔧 Fail2ban available: ${config.fail2banAvailable ? 'Yes' : 'No'}`);
   
   if (config.performance.monitoring) {
     console.log(`⚡ Performance monitoring: Enabled`);
