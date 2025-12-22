@@ -12,8 +12,21 @@ function errorHandler(err, req, res, next) {
   // This ensures frontend can read error responses
   if (!res.headersSent) {
     const origin = req.headers.origin;
-    if (origin) {
-      // Check if origin is allowed (basic check)
+    const nodeEnv = process.env.NODE_ENV || 'development';
+    
+    // In development, allow all origins (including LAN IPs)
+    if (nodeEnv !== 'production') {
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      } else {
+        // Allow requests without origin in development
+        res.setHeader('Access-Control-Allow-Origin', '*');
+      }
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-API-Version');
+    } else if (origin) {
+      // Production: check against allowed origins
       const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
       const allowedOrigins = [
         corsOrigin,
@@ -26,7 +39,7 @@ function errorHandler(err, req, res, next) {
         'http://127.0.0.1:8080',
       ];
       
-      if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+      if (allowedOrigins.includes(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Credentials', 'true');
       }

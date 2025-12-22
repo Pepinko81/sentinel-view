@@ -50,8 +50,24 @@ async function executeScript(scriptName, args = [], options = {}) {
         timeout,
         maxBuffer: 10 * 1024 * 1024, // 10MB max output
         encoding: 'utf8',
+        // Preserve environment PATH for sudo (important for finding fail2ban-client)
+        env: { ...process.env, PATH: process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' },
       }
     );
+    
+    // Check stderr for fail2ban-client errors even on successful execution
+    const combinedOutput = (stdout || '') + (stderr || '');
+    if (stderr && (
+      stderr.includes('fail2ban-client: command not found') ||
+      stderr.includes('fail2ban-client command not found') ||
+      stderr.includes('command not found') && stderr.includes('fail2ban')
+    )) {
+      // Log warning but return output (script might have partial data)
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[SCRIPT EXECUTOR] fail2ban-client not found in PATH, but continuing...');
+      }
+      return { stdout, stderr };
+    }
     
     return { stdout, stderr };
   } catch (error) {
@@ -65,17 +81,21 @@ async function executeScript(scriptName, args = [], options = {}) {
       throw new Error(`Script not found: ${scriptPath}`);
     }
     
-    // Handle fail2ban-client not found - return empty output instead of throwing
-    // This allows graceful degradation when fail2ban is not installed
-    if (error.stderr && (
-      error.stderr.includes('fail2ban-client: command not found') ||
-      error.stderr.includes('command not found') ||
-      error.stderr.includes('fail2ban-client command not found')
-    )) {
+    // Check stderr for fail2ban-client not found errors
+    const errorStderr = error.stderr || '';
+    const errorStdout = error.stdout || '';
+    const combinedError = errorStderr + errorStdout;
+    
+    if (combinedError.includes('fail2ban-client: command not found') ||
+        combinedError.includes('fail2ban-client command not found') ||
+        (combinedError.includes('command not found') && combinedError.includes('fail2ban'))) {
       // Return empty output with error in stderr for parser to handle gracefully
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[SCRIPT EXECUTOR] fail2ban-client not found, returning empty output');
+      }
       return { 
-        stdout: '', 
-        stderr: error.stderr || 'fail2ban-client command not found' 
+        stdout: errorStdout || '', 
+        stderr: errorStderr || 'fail2ban-client command not found' 
       };
     }
     
