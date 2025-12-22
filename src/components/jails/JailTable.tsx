@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { ChevronDown, ChevronRight, Power, PowerOff } from "lucide-react";
 import { Jail } from "@/types/jail";
 import { Button } from "@/components/ui/button";
@@ -69,9 +69,8 @@ export function JailTable({
           {jails.map((jail) => {
             const isExpanded = expandedJails.has(jail.name);
             return (
-              <>
+              <Fragment key={jail.name}>
                 <tr
-                  key={jail.name}
                   className={cn(
                     "border-b border-border/50 transition-colors hover:bg-muted/30",
                     isExpanded && "bg-muted/20"
@@ -153,7 +152,7 @@ export function JailTable({
                   </td>
                 </tr>
                 {isExpanded && jail.bannedIPs.length > 0 && (
-                  <tr key={`${jail.name}-ips`}>
+                  <tr>
                     <td colSpan={6} className="bg-muted/10 p-0">
                       <IPList
                         ips={jail.bannedIPs}
@@ -163,7 +162,7 @@ export function JailTable({
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             );
           })}
         </tbody>
