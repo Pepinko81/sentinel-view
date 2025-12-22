@@ -122,24 +122,27 @@ router.get('/', async (req, res, next) => {
       // Check for fail2ban errors in stderr
       const errorCheck = detectFail2banError(stdout || '', stderr || '');
       
-      // If fail2ban-client is not found, return safe defaults immediately (no parsing needed)
+      // If fail2ban-client is not found, this is normal in development/local environment
+      // Parse what we can (nginx/system data might still be available) and return safe defaults for fail2ban
       if (errorCheck.isError && errorCheck.errorType === 'command_not_found') {
-        console.warn('fail2ban-client not found, returning safe defaults');
-        const errorResponse = serializeOverviewResponse({
-          ...safeDefaults,
-          errors: [errorCheck.message],
-          partial: true,
-          serverStatus: 'offline',
-        });
-        cache.set(cacheKey, errorResponse, ERROR_CACHE_TTL);
-        res.setHeader('X-API-Version', API_VERSION);
-        return res.json(errorResponse);
-      }
-      
-      if (errorCheck.isError) {
-        // fail2ban is down, but we can still parse nginx/system data
-        console.warn('fail2ban error detected:', errorCheck.message);
-        
+        // In development, fail2ban not being installed is normal - don't treat as error
+        // Try to parse nginx/system data if available
+        monitorData = safeParse(parseMonitorOutput, stdout || '', defaultMonitorOutput);
+        // Set fail2ban defaults (empty jails, etc.)
+        monitorData.fail2ban = {
+          status: 'unavailable',
+          jails: [],
+          totalBanned: 0,
+        };
+        monitorData.jails = [];
+        // Don't add error to response - this is expected in local dev
+        monitorData.errors = monitorData.errors || [];
+        // Only mark as partial if we actually have some data
+        if (monitorData.nginx && monitorData.nginx.totalRequests > 0) {
+          monitorData.partial = true;
+        }
+      } else if (errorCheck.isError) {
+        // Other fail2ban errors - fail2ban is down, but we can still parse nginx/system data
         // Try to parse what we can (nginx/system might still work)
         monitorData = safeParse(parseMonitorOutput, stdout || '', defaultMonitorOutput);
         monitorData.errors = monitorData.errors || [];

@@ -14,10 +14,12 @@ function safeParse(parserFn, output, defaults = {}) {
   try {
     // Validate input - handle null/undefined gracefully
     if (output === null || output === undefined) {
+      // In development, empty input might be normal (e.g., fail2ban not installed)
+      // Don't add error, just return defaults
+      const isDevelopment = process.env.NODE_ENV === 'development';
       return { 
         ...defaults, 
-        errors: ['Invalid input: output is null or undefined'], 
-        partial: true 
+        ...(isDevelopment ? {} : { errors: ['Invalid input: output is null or undefined'], partial: true })
       };
     }
     
@@ -31,10 +33,12 @@ function safeParse(parserFn, output, defaults = {}) {
     }
     
     if (output.trim().length === 0) {
+      // In development, empty input might be normal (e.g., fail2ban not installed)
+      // Don't add error, just return defaults
+      const isDevelopment = process.env.NODE_ENV === 'development';
       return { 
         ...defaults, 
-        errors: ['Empty input'], 
-        partial: true 
+        ...(isDevelopment ? {} : { errors: ['Empty input'], partial: true })
       };
     }
     
@@ -216,10 +220,13 @@ function detectFail2banError(output, stderr = '') {
     };
   }
   
+  // Check for command not found - but only treat as error if not in development
+  // In development/local environment, fail2ban might not be installed (normal)
   if (lower.includes('command not found') ||
       lower.includes('fail2ban-client: command not found')) {
+    const isDevelopment = process.env.NODE_ENV === 'development';
     return {
-      isError: true,
+      isError: !isDevelopment, // Only error in production
       errorType: 'command_not_found',
       message: 'fail2ban-client command not found'
     };

@@ -56,16 +56,16 @@ async function executeScript(scriptName, args = [], options = {}) {
     );
     
     // Check stderr for fail2ban-client errors even on successful execution
+    // In development/local environment, this is normal and not an error
     const combinedOutput = (stdout || '') + (stderr || '');
     if (stderr && (
       stderr.includes('fail2ban-client: command not found') ||
       stderr.includes('fail2ban-client command not found') ||
-      stderr.includes('command not found') && stderr.includes('fail2ban')
+      (stderr.includes('command not found') && stderr.includes('fail2ban'))
     )) {
-      // Log warning but return output (script might have partial data)
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[SCRIPT EXECUTOR] fail2ban-client not found in PATH, but continuing...');
-      }
+      // In development, fail2ban might not be installed - this is normal
+      // Don't log as error, just return output (script might have partial data from nginx/system)
+      // The parser will handle empty fail2ban data gracefully
       return { stdout, stderr };
     }
     
@@ -89,10 +89,9 @@ async function executeScript(scriptName, args = [], options = {}) {
     if (combinedError.includes('fail2ban-client: command not found') ||
         combinedError.includes('fail2ban-client command not found') ||
         (combinedError.includes('command not found') && combinedError.includes('fail2ban'))) {
+      // In development/local environment, fail2ban might not be installed - this is normal
       // Return empty output with error in stderr for parser to handle gracefully
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[SCRIPT EXECUTOR] fail2ban-client not found, returning empty output');
-      }
+      // Don't log as error - parser will return safe defaults
       return { 
         stdout: errorStdout || '', 
         stderr: errorStderr || 'fail2ban-client command not found' 
