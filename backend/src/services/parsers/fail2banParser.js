@@ -76,28 +76,31 @@ function parseFail2banStatus(output) {
     if (line.toLowerCase().includes('jail list') || line.toLowerCase().includes('number of jail')) {
       let jailLine = '';
       
-      // Remove leading characters: backticks, dashes, pipes, whitespace
-      const cleanedLine = line.replace(/^[`|\-|\s]+/, '').trim();
+      // Remove leading characters: backticks, dashes, pipes, whitespace, tabs
+      const cleanedLine = line.replace(/^[`|\-|\s\t]+/, '').trim();
       
       // Try to extract from same line - handle tabs, colons, spaces
       // Match: "Jail list:" followed by tab, colon, or space, then jail names
-      const sameLineMatch = cleanedLine.match(/jail\s*list[:\s\t]+(.+)/i);
-      if (sameLineMatch) {
-        jailLine = sameLineMatch[1];
+      let sameLineMatch = cleanedLine.match(/jail\s*list[:\s\t]+(.+)/i);
+      if (!sameLineMatch) {
+        // Also try original line (might have special characters or tabs)
+        sameLineMatch = line.match(/jail\s*list[:\s\t]+(.+)/i);
+      }
+      if (!sameLineMatch) {
+        // More flexible - just look for "jail list" anywhere followed by content
+        sameLineMatch = line.match(/jail\s*list[:\s\t]*([^\n]+)/i);
+      }
+      
+      if (sameLineMatch && sameLineMatch[1]) {
+        jailLine = sameLineMatch[1].trim();
       } else {
-        // Also try original line (might have special characters)
-        const originalMatch = line.match(/jail\s*list[:\s\t]+(.+)/i);
-        if (originalMatch) {
-          jailLine = originalMatch[1];
-        } else {
-          // Search forward for jail names (not just next line)
-          for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
-            const candidate = lines[j];
-            // Check if line contains jail-like content (comma-separated, alphanumeric)
-            if (candidate && (candidate.includes(',') || /^[a-zA-Z0-9._-]+/.test(candidate))) {
-              jailLine = candidate.replace(/^[`|\-|\s]+/, '').trim();
-              break;
-            }
+        // Search forward for jail names (not just next line)
+        for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+          const candidate = lines[j];
+          // Check if line contains jail-like content (comma-separated, alphanumeric)
+          if (candidate && (candidate.includes(',') || /^[a-zA-Z0-9._-]+/.test(candidate))) {
+            jailLine = candidate.replace(/^[`|\-|\s\t]+/, '').trim();
+            break;
           }
         }
       }
@@ -107,16 +110,20 @@ function parseFail2banStatus(output) {
         // Remove any remaining special characters
         const jails = jailLine
           .split(',')
-          .map(j => j.trim().replace(/^[`|\-|\s]+/, '').trim())
+          .map(j => j.trim().replace(/^[`|\-|\s\t]+/, '').trim())
           .filter(j => j && j !== '' && j !== '-');
         
         if (jails.length > 0) {
           result.jails = jails;
           // Log for debugging (only in development)
           if (process.env.NODE_ENV === 'development') {
-            console.log(`[PARSER] Extracted ${jails.length} jails: ${jails.join(', ')}`);
+            console.log(`[FAIL2BAN PARSER] ✅ Extracted ${jails.length} jails: ${jails.join(', ')}`);
           }
+        } else if (process.env.NODE_ENV === 'development') {
+          console.warn(`[FAIL2BAN PARSER] ⚠️ Found jail list but extracted 0 jails. Line: ${JSON.stringify(line)}, jailLine: ${JSON.stringify(jailLine)}`);
         }
+      } else if (process.env.NODE_ENV === 'development') {
+        console.warn(`[FAIL2BAN PARSER] ⚠️ Found "jail list" but couldn't extract jail names. Line: ${JSON.stringify(line)}`);
       }
     }
   }

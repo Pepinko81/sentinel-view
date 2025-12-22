@@ -86,31 +86,51 @@ function parseMonitorOutput(output) {
     }
     
     // Parse fail2ban status
-    if (currentSection === 'fail2ban') {
+    // Check if we're in fail2ban section OR if line contains jail list (might be before section marker)
+    // Also check previous/next lines for jail list if we're in fail2ban section
+    if (currentSection === 'fail2ban' || line.toLowerCase().includes('jail list')) {
+      // Check current line
       if (line.toLowerCase().includes('jail list')) {
-        // Remove leading characters: backticks, dashes, pipes, whitespace
-        const cleanedLine = line.replace(/^[`|\-|\s]+/, '').trim();
+        // Remove leading characters: backticks, dashes, pipes, whitespace, tabs
+        // Handle: `- Jail list:	nginx-404, ...
+        // Handle: - Jail list:	nginx-404, ...
+        // Handle: |  Jail list: nginx-404, ...
+        let cleanedLine = line.replace(/^[`|\-|\s\t]+/, '').trim();
         
         // Try multiple patterns to extract jail list
         let match = cleanedLine.match(/jail\s*list[:\s\t]+(.+)/i);
         if (!match) {
-          // Try original line (might have special characters)
+          // Try original line (might have special characters or tabs)
           match = line.match(/jail\s*list[:\s\t]+(.+)/i);
         }
         
-        if (match) {
-          const jails = match[1]
+        if (!match) {
+          // Try with more flexible pattern - just look for "jail list" anywhere
+          const flexibleMatch = line.match(/jail\s*list[:\s\t]*([^\n]+)/i);
+          if (flexibleMatch) {
+            match = flexibleMatch;
+          }
+        }
+        
+        if (match && match[1]) {
+          // Extract jail names - split by comma and clean
+          const jailLine = match[1].trim();
+          const jails = jailLine
             .split(',')
-            .map(j => j.trim().replace(/^[`|\-|\s]+/, '').trim())
+            .map(j => j.trim().replace(/^[`|\-|\s\t]+/, '').trim())
             .filter(j => j && j !== '' && j !== '-');
           
           if (jails.length > 0) {
             result.fail2ban.jails = jails;
             // Log for debugging (only in development)
             if (process.env.NODE_ENV === 'development') {
-              console.log(`[MONITOR PARSER] Extracted ${jails.length} jails: ${jails.join(', ')}`);
+              console.log(`[MONITOR PARSER] ✅ Extracted ${jails.length} jails: ${jails.join(', ')}`);
             }
+          } else if (process.env.NODE_ENV === 'development') {
+            console.warn(`[MONITOR PARSER] ⚠️ Found jail list line but extracted 0 jails. Line: ${JSON.stringify(line)}`);
           }
+        } else if (process.env.NODE_ENV === 'development') {
+          console.warn(`[MONITOR PARSER] ⚠️ Found "jail list" but regex didn't match. Line: ${JSON.stringify(line)}`);
         }
       }
       if (line.toLowerCase().includes('status')) {
