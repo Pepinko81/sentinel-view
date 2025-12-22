@@ -88,13 +88,29 @@ function parseMonitorOutput(output) {
     // Parse fail2ban status
     if (currentSection === 'fail2ban') {
       if (line.toLowerCase().includes('jail list')) {
-        const match = line.match(/jail\s*list[:\s]+(.+)/i);
+        // Remove leading characters: backticks, dashes, pipes, whitespace
+        const cleanedLine = line.replace(/^[`|\-|\s]+/, '').trim();
+        
+        // Try multiple patterns to extract jail list
+        let match = cleanedLine.match(/jail\s*list[:\s\t]+(.+)/i);
+        if (!match) {
+          // Try original line (might have special characters)
+          match = line.match(/jail\s*list[:\s\t]+(.+)/i);
+        }
+        
         if (match) {
           const jails = match[1]
             .split(',')
-            .map(j => j.trim())
-            .filter(j => j);
-          result.fail2ban.jails = jails;
+            .map(j => j.trim().replace(/^[`|\-|\s]+/, '').trim())
+            .filter(j => j && j !== '' && j !== '-');
+          
+          if (jails.length > 0) {
+            result.fail2ban.jails = jails;
+            // Log for debugging (only in development)
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[MONITOR PARSER] Extracted ${jails.length} jails: ${jails.join(', ')}`);
+            }
+          }
         }
       }
       if (line.toLowerCase().includes('status')) {

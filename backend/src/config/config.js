@@ -1,11 +1,28 @@
-require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
 
-// Load environment-specific .env files
+// Determine environment FIRST (before loading any .env files)
 const nodeEnv = process.env.NODE_ENV || 'development';
-if (fs.existsSync(path.join(__dirname, `../../.env.${nodeEnv}`))) {
-  require('dotenv').config({ path: path.join(__dirname, `../../.env.${nodeEnv}`) });
+
+// Deterministic env loading order:
+// 1. Load base .env file (if exists)
+const baseEnvPath = path.join(__dirname, '../../.env');
+if (fs.existsSync(baseEnvPath)) {
+  require('dotenv').config({ path: baseEnvPath });
+}
+
+// 2. Load environment-specific .env file (overrides base)
+const envSpecificPath = path.join(__dirname, `../../.env.${nodeEnv}`);
+if (fs.existsSync(envSpecificPath)) {
+  require('dotenv').config({ path: envSpecificPath, override: true });
+}
+
+// 3. System environment variables override everything (already loaded by process.env)
+
+// Log loaded environment for debugging
+if (nodeEnv === 'development') {
+  console.log(`📋 Environment: ${nodeEnv}`);
+  console.log(`📋 Loaded .env files: ${fs.existsSync(baseEnvPath) ? '.env' : '(none)'}${fs.existsSync(envSpecificPath) ? `, .env.${nodeEnv}` : ''}`);
 }
 
 const config = {
@@ -43,7 +60,8 @@ const config = {
   scriptTimeout: parseInt(process.env.SCRIPT_TIMEOUT) || 30000, // 30 seconds
   
   // Scripts directory - STRICTLY from environment variable (no hardcoded defaults)
-  scriptsDir: process.env.SCRIPTS_DIR || null,
+  // Must be set in .env.development or .env.production
+  scriptsDir: process.env.SCRIPTS_DIR ? process.env.SCRIPTS_DIR.trim() : null,
   
   // Fail2ban availability flag
   fail2banAvailable: process.env.FAIL2BAN_AVAILABLE === 'true' || 
@@ -93,11 +111,19 @@ function validateConfig() {
   }
   
   // Check SCRIPTS_DIR - REQUIRED (no hardcoded fallback)
+  // Log what we're checking for debugging
+  if (config.nodeEnv === 'development') {
+    console.log(`📋 SCRIPTS_DIR from env: ${process.env.SCRIPTS_DIR ? 'SET' : 'NOT SET'}`);
+    if (process.env.SCRIPTS_DIR) {
+      console.log(`📋 SCRIPTS_DIR value: ${process.env.SCRIPTS_DIR}`);
+    }
+  }
+  
   if (!config.scriptsDir || config.scriptsDir.trim() === '') {
     if (config.nodeEnv === 'production') {
-      errors.push('SCRIPTS_DIR is required in production and must be set in environment variables');
+      errors.push('SCRIPTS_DIR is required in production and must be set in .env.production');
     } else {
-      warnings.push('SCRIPTS_DIR not set - script execution will fail');
+      warnings.push('SCRIPTS_DIR not set - script execution will fail. Set it in .env.development');
     }
   } else {
     // Validate SCRIPTS_DIR path exists and is accessible

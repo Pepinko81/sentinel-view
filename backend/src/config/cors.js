@@ -45,15 +45,19 @@ function getAllowedOrigins() {
  */
 const corsOptions = {
   origin: function (origin, callback) {
-    const allowedOrigins = getAllowedOrigins();
-    
-    // Allow requests with no origin (mobile apps, Postman, etc.) in development only
-    if (!origin && config.nodeEnv === 'development') {
+    // DEVELOPMENT MODE: Allow all origins (including LAN IPs)
+    // This enables frontend access from other computers in local network
+    // Production mode will use strict allowlist (see below)
+    if (config.nodeEnv !== 'production') {
+      // Allow all origins in development (LAN access enabled)
       return callback(null, true);
     }
     
+    // PRODUCTION MODE: Strict origin validation
+    const allowedOrigins = getAllowedOrigins();
+    
     // In production, require origin
-    if (!origin && config.nodeEnv === 'production') {
+    if (!origin) {
       return callback(new Error('CORS: Origin header required in production'));
     }
     

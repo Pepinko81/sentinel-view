@@ -54,12 +54,15 @@ app.use(errorHandler);
 
 // Start server
 const PORT = config.port;
-app.listen(PORT, () => {
-  console.log(`🚀 Sentinel Backend API running on port ${PORT}`);
+// Network binding: 0.0.0.0 in development (LAN access), configurable in production
+const SERVER_HOST = process.env.SERVER_HOST || (config.nodeEnv === 'production' ? '127.0.0.1' : '0.0.0.0');
+
+app.listen(PORT, SERVER_HOST, () => {
+  console.log(`🚀 Sentinel Backend API running on ${SERVER_HOST}:${PORT}`);
   console.log(`📊 Environment: ${config.nodeEnv}`);
   console.log(`🔒 Authentication: ${config.authToken ? 'Enabled' : 'Disabled (WARNING!)'}`);
   console.log(`📁 Scripts directory: ${config.scriptsDir || '(not configured)'}`);
-  console.log(`🌐 CORS Origin: ${config.corsOrigin}`);
+  console.log(`🌐 CORS: ${config.nodeEnv === 'production' ? `Strict (${config.corsOrigin})` : 'Permissive (LAN access enabled)'}`);
   console.log(`🔧 Fail2ban available: ${config.fail2banAvailable ? 'Yes' : 'No'}`);
   
   if (config.performance.monitoring) {

@@ -68,33 +68,55 @@ function parseFail2banStatus(output) {
       }
     }
     
-    // Parse jail list - improved anchor-based parsing
+    // Parse jail list - robust parsing for various formats
+    // Handles: "Jail list:\tnginx-404, nginx-admin-scanners"
+    // Handles: "- Jail list:\tnginx-404, nginx-admin-scanners"
+    // Handles: "`- Jail list:\tnginx-404, nginx-admin-scanners"
+    // Handles: "|  Jail list: nginx-404, nginx-admin-scanners"
     if (line.toLowerCase().includes('jail list') || line.toLowerCase().includes('number of jail')) {
       let jailLine = '';
       
-      // Try to extract from same line first
-      const sameLineMatch = line.match(/jail\s*list[:\s]+(.+)/i);
+      // Remove leading characters: backticks, dashes, pipes, whitespace
+      const cleanedLine = line.replace(/^[`|\-|\s]+/, '').trim();
+      
+      // Try to extract from same line - handle tabs, colons, spaces
+      // Match: "Jail list:" followed by tab, colon, or space, then jail names
+      const sameLineMatch = cleanedLine.match(/jail\s*list[:\s\t]+(.+)/i);
       if (sameLineMatch) {
         jailLine = sameLineMatch[1];
       } else {
-        // Search forward for jail names (not just next line)
-        for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
-          const candidate = lines[j];
-          // Check if line contains jail-like content (comma-separated, alphanumeric)
-          if (candidate && (candidate.includes(',') || /^[a-zA-Z0-9._-]+/.test(candidate))) {
-            jailLine = candidate;
-            break;
+        // Also try original line (might have special characters)
+        const originalMatch = line.match(/jail\s*list[:\s\t]+(.+)/i);
+        if (originalMatch) {
+          jailLine = originalMatch[1];
+        } else {
+          // Search forward for jail names (not just next line)
+          for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+            const candidate = lines[j];
+            // Check if line contains jail-like content (comma-separated, alphanumeric)
+            if (candidate && (candidate.includes(',') || /^[a-zA-Z0-9._-]+/.test(candidate))) {
+              jailLine = candidate.replace(/^[`|\-|\s]+/, '').trim();
+              break;
+            }
           }
         }
       }
       
       if (jailLine) {
         // Split by comma and clean up
+        // Remove any remaining special characters
         const jails = jailLine
           .split(',')
-          .map(j => j.trim())
-          .filter(j => j && j !== '');
-        result.jails = jails;
+          .map(j => j.trim().replace(/^[`|\-|\s]+/, '').trim())
+          .filter(j => j && j !== '' && j !== '-');
+        
+        if (jails.length > 0) {
+          result.jails = jails;
+          // Log for debugging (only in development)
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[PARSER] Extracted ${jails.length} jails: ${jails.join(', ')}`);
+          }
+        }
       }
     }
   }
