@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { executeScript } = require('../services/scriptExecutor');
-const { parseBackupOutput } = require('../services/parsers/backupParser');
+const { parseBackupOutput, defaultBackupOutput } = require('../services/parsers/backupParser');
+const { safeParse } = require('../services/parsers/parserUtils');
 const { backupLimiter } = require('../middleware/rateLimiter');
 const fs = require('fs').promises;
 const path = require('path');
@@ -20,8 +21,9 @@ router.post('/', async (req, res, next) => {
     // Execute backup script (no caching)
     const { stdout, stderr } = await executeScript('backup-fail2ban.sh');
     
-    // Parse backup output
-    const backupData = parseBackupOutput(stdout + '\n' + stderr);
+    // Parse backup output with error handling
+    const combinedOutput = stdout + '\n' + stderr;
+    const backupData = safeParse(parseBackupOutput, combinedOutput, defaultBackupOutput);
     
     // If parsing didn't find the file, try to find it in the backup directory
     if (!backupData.path || !backupData.success) {
@@ -56,6 +58,8 @@ router.post('/', async (req, res, next) => {
       size: backupData.size || 0,
       sizeFormatted: backupData.sizeFormatted || '0 B',
       timestamp: new Date().toISOString(),
+      errors: backupData.errors || [],
+      partial: backupData.partial || false,
     });
   } catch (err) {
     next(err);

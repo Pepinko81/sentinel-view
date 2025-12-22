@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { executeScript } = require('../services/scriptExecutor');
-const { parseMonitorOutput } = require('../services/parsers/monitorParser');
-const { parseFail2banStatus, extractJailNames, parseJailStatus } = require('../services/parsers/fail2banParser');
+const { parseMonitorOutput, defaultMonitorOutput } = require('../services/parsers/monitorParser');
+const { parseQuickCheck } = require('../services/parsers/monitorParser');
+const { parseFail2banStatus, extractJailNames, defaultFail2banStatus } = require('../services/parsers/fail2banParser');
+const { detectFail2banError, safeParse } = require('../services/parsers/parserUtils');
 const { inferCategory, inferSeverity } = require('../utils/jailClassifier');
 const { isValidJailName } = require('../utils/validators');
 const cache = require('../services/cache');
@@ -12,6 +14,7 @@ const config = require('../config/config');
  * GET /api/jails
  * Returns dynamic list of all jails
  * Uses monitor-security.sh to get comprehensive jail data
+ * Handles fail2ban downtime gracefully
  */
 router.get('/', async (req, res, next) => {
   try {
@@ -22,60 +25,97 @@ router.get('/', async (req, res, next) => {
       return res.json(cached);
     }
     
+    // Safe defaults
+    const safeDefaults = {
+      jails: [],
+      lastUpdated: new Date().toISOString(),
+      serverStatus: 'offline',
+      errors: [],
+      partial: false,
+    };
+    
     // Use monitor-security.sh for comprehensive data
     let monitorData = null;
+    
     try {
-      const { stdout } = await executeScript('monitor-security.sh');
-      monitorData = parseMonitorOutput(stdout);
+      const { stdout, stderr } = await executeScript('monitor-security.sh');
+      
+      // Check for fail2ban errors
+      const errorCheck = detectFail2banError(stdout, stderr);
+      if (errorCheck.isError) {
+        console.warn('fail2ban error detected:', errorCheck.message);
+        
+        // Try to parse what we can
+        monitorData = safeParse(parseMonitorOutput, stdout, defaultMonitorOutput);
+        monitorData.errors = monitorData.errors || [];
+        monitorData.errors.push(errorCheck.message);
+        monitorData.partial = true;
+      } else {
+        monitorData = safeParse(parseMonitorOutput, stdout, defaultMonitorOutput);
+      }
     } catch (err) {
       console.error('Failed to execute monitor-security.sh:', err.message);
+      
       // Fallback: try quick-check.sh
       try {
-        const { stdout: quickOutput } = await executeScript('quick-check.sh');
-        // For quick-check, we only get jail names, need to get details separately
-        const { parseQuickCheck } = require('../services/parsers/monitorParser');
-        const quickData = parseQuickCheck(quickOutput);
+        const { stdout: quickOutput, stderr: quickStderr } = await executeScript('quick-check.sh');
         
-        // Get details for each jail
-        const jails = [];
-        for (const jailName of quickData.jails) {
-          try {
-            // Use test-fail2ban.sh or fail2ban-client directly via a wrapper
-            // For now, create minimal jail entry
-            jails.push({
-              name: jailName,
-              enabled: false,
-              bannedIPs: [],
-              category: inferCategory(jailName),
-              filter: jailName,
-            });
-          } catch (err) {
-            console.warn(`Failed to get details for jail ${jailName}:`, err.message);
-          }
+        const errorCheck = detectFail2banError(quickOutput, quickStderr);
+        if (errorCheck.isError) {
+          return res.json({
+            ...safeDefaults,
+            errors: [errorCheck.message],
+            partial: true,
+            serverStatus: 'offline',
+          });
         }
+        
+        const quickData = safeParse(parseQuickCheck, quickOutput, {
+          jails: [],
+          bannedCount: 0,
+          recentAttacks: 0,
+          errors: 0,
+        });
+        
+        // Create minimal jail entries
+        const jails = (quickData.jails || []).map(jailName => ({
+          name: jailName,
+          enabled: false,
+          bannedIPs: [],
+          category: inferCategory(jailName),
+          filter: jailName,
+        }));
         
         const response = {
           jails,
           lastUpdated: new Date().toISOString(),
-          serverStatus: 'online',
+          serverStatus: quickData.errors && quickData.errors.length > 0 ? 'partial' : 'online',
+          errors: quickData.errors || [],
+          partial: quickData.partial || false,
         };
         
         cache.set(cacheKey, response, config.cache.jailsTTL);
         return res.json(response);
       } catch (fallbackErr) {
+        console.error('Fallback script also failed:', fallbackErr.message);
         return res.json({
-          jails: [],
-          lastUpdated: new Date().toISOString(),
-          serverStatus: 'offline',
+          ...safeDefaults,
+          errors: [`Script execution failed: ${err.message}`, `Fallback failed: ${fallbackErr.message}`],
+          partial: true,
         });
       }
     }
     
+    // Check for parsing errors
+    if (monitorData.errors && monitorData.errors.length > 0) {
+      console.warn('Parser warnings:', monitorData.errors);
+    }
+    
     // Transform monitor data to frontend format
-    const jails = monitorData.jails.map(jail => ({
+    const jails = (monitorData.jails || []).map(jail => ({
       name: jail.name,
-      enabled: jail.bannedIPs.length > 0 || jail.bannedCount > 0,
-      bannedIPs: jail.bannedIPs.map(ip => ({
+      enabled: (jail.bannedIPs && jail.bannedIPs.length > 0) || (jail.bannedCount > 0) || false,
+      bannedIPs: (jail.bannedIPs || []).map(ip => ({
         ip,
         bannedAt: new Date().toISOString(),
         banCount: 1,
@@ -87,7 +127,8 @@ router.get('/', async (req, res, next) => {
     }));
     
     // Also include jails that might not have banned IPs but are configured
-    for (const jailName of monitorData.fail2ban.jails) {
+    const configuredJails = monitorData.fail2ban?.jails || [];
+    for (const jailName of configuredJails) {
       if (!jails.find(j => j.name === jailName)) {
         jails.push({
           name: jailName,
@@ -99,10 +140,21 @@ router.get('/', async (req, res, next) => {
       }
     }
     
+    // Determine server status
+    let serverStatus = 'online';
+    if (monitorData.partial || (monitorData.errors && monitorData.errors.length > 0)) {
+      const fail2banErrors = monitorData.errors.filter(e => 
+        e.includes('fail2ban') || e.includes('connection') || e.includes('service')
+      );
+      serverStatus = fail2banErrors.length > 0 ? 'offline' : 'partial';
+    }
+    
     const response = {
       jails,
       lastUpdated: new Date().toISOString(),
-      serverStatus: 'online',
+      serverStatus,
+      errors: monitorData.errors || [],
+      partial: monitorData.partial || false,
     };
     
     cache.set(cacheKey, response, config.cache.jailsTTL);
@@ -116,6 +168,7 @@ router.get('/', async (req, res, next) => {
  * GET /api/jails/:name
  * Returns details for a single jail
  * Uses test-fail2ban.sh output or fail2ban-client directly
+ * Handles fail2ban downtime gracefully
  */
 router.get('/:name', async (req, res, next) => {
   try {
@@ -136,30 +189,62 @@ router.get('/:name', async (req, res, next) => {
       return res.json(cached);
     }
     
+    // Safe defaults
+    const safeDefaults = {
+      name: jailName,
+      enabled: false,
+      bannedIPs: [],
+      category: inferCategory(jailName),
+      severity: 'low',
+      filter: jailName,
+      maxRetry: null,
+      banTime: null,
+      findTime: null,
+      last_activity: null,
+      errors: [],
+      partial: false,
+    };
+    
     // First check if jail exists using monitor-security.sh
     let monitorData = null;
+    
     try {
-      const { stdout } = await executeScript('monitor-security.sh');
-      monitorData = parseMonitorOutput(stdout);
+      const { stdout, stderr } = await executeScript('monitor-security.sh');
+      
+      // Check for fail2ban errors
+      const errorCheck = detectFail2banError(stdout, stderr);
+      if (errorCheck.isError) {
+        return res.status(503).json({
+          ...safeDefaults,
+          errors: [errorCheck.message],
+          partial: true,
+        });
+      }
+      
+      monitorData = safeParse(parseMonitorOutput, stdout, defaultMonitorOutput);
     } catch (err) {
       return res.status(503).json({
-        error: 'Failed to connect to fail2ban',
-        code: 'FAIL2BAN_UNAVAILABLE',
+        ...safeDefaults,
+        errors: [`Failed to connect to fail2ban: ${err.message}`],
+        partial: true,
       });
     }
     
-    if (!monitorData.fail2ban.jails.includes(jailName)) {
+    // Check if jail exists
+    const configuredJails = monitorData.fail2ban?.jails || [];
+    if (!configuredJails.includes(jailName)) {
       return res.status(404).json({
         error: `Jail "${jailName}" not found`,
         code: 'JAIL_NOT_FOUND',
+        errors: monitorData.errors || [],
       });
     }
     
     // Find jail in monitor data
-    const jailData = monitorData.jails.find(j => j.name === jailName);
+    const jailData = (monitorData.jails || []).find(j => j.name === jailName);
     
     const category = inferCategory(jailName);
-    const bannedIPs = jailData ? jailData.bannedIPs : [];
+    const bannedIPs = jailData ? (jailData.bannedIPs || []) : [];
     const severity = inferSeverity(jailName, bannedIPs.length);
     
     const bannedIPsFormatted = bannedIPs.map(ip => ({
@@ -179,6 +264,8 @@ router.get('/:name', async (req, res, next) => {
       banTime: null,
       findTime: null,
       last_activity: bannedIPsFormatted.length > 0 ? bannedIPsFormatted[0].bannedAt : null,
+      errors: monitorData.errors || [],
+      partial: monitorData.partial || false,
     };
     
     cache.set(cacheKey, response, config.cache.jailsTTL);

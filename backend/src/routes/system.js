@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { executeScript } = require('../services/scriptExecutor');
-const { parseMonitorOutput } = require('../services/parsers/monitorParser');
+const { parseMonitorOutput, defaultMonitorOutput } = require('../services/parsers/monitorParser');
+const { parseSystemInfo, defaultSystemInfo } = require('../services/parsers/systemParser');
+const { safeParse, detectFail2banError } = require('../services/parsers/parserUtils');
 const cache = require('../services/cache');
 const config = require('../config/config');
 const os = require('os');
@@ -10,6 +12,7 @@ const os = require('os');
  * GET /api/system
  * Returns memory, disk, uptime
  * Uses monitor-security.sh output
+ * Works even if fail2ban is down (system info is independent)
  */
 router.get('/', async (req, res, next) => {
   try {
@@ -20,30 +23,66 @@ router.get('/', async (req, res, next) => {
       return res.json(cached);
     }
     
-    let systemInfo = {
+    // Safe defaults
+    const safeDefaults = {
       hostname: os.hostname(),
       uptime: formatUptime(process.uptime()),
-      memory: null,
-      disk: null,
-      load: null,
+      memory: 'N/A',
+      disk: 'N/A',
+      load: 'N/A',
+      errors: [],
+      partial: false,
     };
+    
+    let systemInfo = { ...safeDefaults };
     
     try {
       // Use monitor-security.sh which includes system info
-      const { stdout } = await executeScript('monitor-security.sh');
-      const monitorData = parseMonitorOutput(stdout);
+      const { stdout, stderr } = await executeScript('monitor-security.sh');
       
-      systemInfo = {
-        hostname: monitorData.hostname || os.hostname(),
-        uptime: monitorData.system.uptime || formatUptime(process.uptime()),
-        memory: monitorData.system.memory || 'N/A',
-        disk: monitorData.system.disk || 'N/A',
-        load: monitorData.system.load || 'N/A',
-      };
+      // Check for errors (system info should work even if fail2ban is down)
+      const errorCheck = detectFail2banError(stdout, stderr);
+      
+      // Parse monitor output
+      const monitorData = safeParse(parseMonitorOutput, stdout, defaultMonitorOutput);
+      
+      // Extract system info from monitor data
+      if (monitorData.system) {
+        systemInfo = {
+          hostname: monitorData.hostname || monitorData.system.hostname || os.hostname(),
+          uptime: monitorData.system.uptime || formatUptime(process.uptime()),
+          memory: monitorData.system.memory || 'N/A',
+          disk: monitorData.system.disk || 'N/A',
+          load: monitorData.system.load || 'N/A',
+          errors: monitorData.errors || [],
+          partial: monitorData.partial || false,
+        };
+      } else {
+        // Fallback: try parsing as standalone system info
+        const systemData = safeParse(parseSystemInfo, stdout, defaultSystemInfo);
+        systemInfo = {
+          ...safeDefaults,
+          ...systemData,
+        };
+      }
+      
+      // Add fail2ban error to errors array if present (but don't fail the request)
+      if (errorCheck.isError && errorCheck.errorType !== 'empty_output') {
+        systemInfo.errors = systemInfo.errors || [];
+        if (!systemInfo.errors.some(e => e.includes('fail2ban'))) {
+          systemInfo.errors.push(`fail2ban unavailable (system data still available): ${errorCheck.message}`);
+        }
+        systemInfo.partial = true;
+      }
     } catch (err) {
       console.error('Failed to get system info:', err.message);
       // Use OS defaults
-      systemInfo.uptime = formatUptime(process.uptime());
+      systemInfo = {
+        ...safeDefaults,
+        uptime: formatUptime(process.uptime()),
+        errors: [`Failed to retrieve system information: ${err.message}`],
+        partial: true,
+      };
     }
     
     cache.set(cacheKey, systemInfo, config.cache.systemTTL);
