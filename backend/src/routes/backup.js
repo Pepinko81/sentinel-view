@@ -2,8 +2,12 @@ const express = require('express');
 const router = express.Router();
 const { executeScript } = require('../services/scriptExecutor');
 const { parseBackupOutput } = require('../services/parsers/backupParser');
+const { backupLimiter } = require('../middleware/rateLimiter');
 const fs = require('fs').promises;
 const path = require('path');
+
+// Apply stricter rate limiting to backup endpoint
+router.use(backupLimiter);
 
 /**
  * POST /api/backup

@@ -40,5 +40,83 @@ const config = {
   },
 };
 
+/**
+ * Validate configuration on startup
+ * Fails fast if required environment variables are missing
+ */
+function validateConfig() {
+  const required = ['AUTH_TOKEN', 'SCRIPTS_DIR'];
+  const missing = [];
+  const warnings = [];
+  
+  // Check required variables
+  required.forEach(key => {
+    const value = process.env[key];
+    if (!value || value.trim() === '' || value === 'change-me-in-production') {
+      missing.push(key);
+    }
+  });
+  
+  // Check AUTH_TOKEN specifically
+  if (!config.authToken || config.authToken === 'change-me-in-production') {
+    if (!missing.includes('AUTH_TOKEN')) {
+      missing.push('AUTH_TOKEN');
+    }
+  }
+  
+  // Check SCRIPTS_DIR
+  if (!config.scriptsDir || config.scriptsDir.includes('opt/fail2ban-dashboard/scripts')) {
+    // If using default path, check if it exists
+    const fs = require('fs');
+    if (!fs.existsSync(config.scriptsDir)) {
+      warnings.push(`SCRIPTS_DIR path does not exist: ${config.scriptsDir}`);
+    }
+  }
+  
+  // Fail if required variables are missing
+  if (missing.length > 0) {
+    console.error('\n❌ Missing required environment variables:');
+    missing.forEach(key => {
+      console.error(`   - ${key}`);
+    });
+    console.error('\n💡 Create .env file or set environment variables');
+    console.error('💡 See .env.example for reference');
+    console.error('\nExample:');
+    console.error('   AUTH_TOKEN=your-secure-random-token-here');
+    console.error('   SCRIPTS_DIR=/opt/fail2ban-dashboard/scripts\n');
+    process.exit(1);
+  }
+  
+  // Warn about production defaults
+  if (config.nodeEnv === 'production') {
+    if (config.authToken === 'change-me-in-production') {
+      console.error('❌ AUTH_TOKEN must be set in production!');
+      console.error('   Using default token in production is a security risk.\n');
+      process.exit(1);
+    }
+    
+    if (config.port === 3001) {
+      warnings.push('Using default port 3001 in production');
+    }
+  }
+  
+  // Show warnings (non-fatal)
+  if (warnings.length > 0) {
+    console.warn('\n⚠️  Configuration warnings:');
+    warnings.forEach(warning => {
+      console.warn(`   - ${warning}`);
+    });
+    console.warn('');
+  }
+  
+  // Success message
+  if (config.nodeEnv === 'development') {
+    console.log('✅ Configuration validated successfully');
+  }
+}
+
+// Attach validation to config object
+config.validate = validateConfig;
+
 module.exports = config;
 

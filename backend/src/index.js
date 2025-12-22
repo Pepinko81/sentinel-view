@@ -1,11 +1,14 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
 const config = require('./config/config');
 const { authenticate } = require('./middleware/auth');
 const { errorHandler } = require('./middleware/errorHandler');
+const { apiLimiter, backupLimiter } = require('./middleware/rateLimiter');
 const apiRoutes = require('./routes');
+
+// Validate configuration on startup (fail fast if secrets missing)
+config.validate();
 
 const app = express();
 
@@ -22,19 +25,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: config.rateLimit.windowMs,
-  max: config.rateLimit.max,
-  message: {
-    error: 'Too many requests from this IP, please try again later.',
-    code: 'RATE_LIMIT_EXCEEDED',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-app.use('/api', limiter);
+// Rate limiting - per-IP tracking
+// This prevents DoS attacks and reduces system load from excessive sudo calls
+app.use('/api', apiLimiter);
 
 // Health check endpoint (no auth required)
 app.get('/health', (req, res) => {
