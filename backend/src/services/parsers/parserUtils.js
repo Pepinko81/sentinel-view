@@ -12,34 +12,36 @@
  */
 function safeParse(parserFn, output, defaults = {}) {
   try {
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
     // Validate input - handle null/undefined gracefully
     if (output === null || output === undefined) {
-      // In development, empty input might be normal (e.g., fail2ban not installed)
-      // Don't add error, just return defaults
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      return { 
-        ...defaults, 
-        ...(isDevelopment ? {} : { errors: ['Invalid input: output is null or undefined'], partial: true })
-      };
+      if (isDevelopment) {
+        // Development: return defaults silently
+        return { ...defaults };
+      } else {
+        // Production: this is a critical error
+        throw new Error('Parser received null/undefined input in production - this indicates a critical failure');
+      }
     }
     
     // Convert to string if not already (handles numbers, objects, etc.)
     if (typeof output !== 'string') {
       // Try to convert to string, but log warning
-      if (process.env.NODE_ENV === 'development') {
+      if (isDevelopment) {
         console.warn(`[PARSER] Output is not a string (type: ${typeof output}), converting...`);
       }
       output = String(output);
     }
     
     if (output.trim().length === 0) {
-      // In development, empty input might be normal (e.g., fail2ban not installed)
-      // Don't add error, just return defaults
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      return { 
-        ...defaults, 
-        ...(isDevelopment ? {} : { errors: ['Empty input'], partial: true })
-      };
+      if (isDevelopment) {
+        // Development: return defaults silently
+        return { ...defaults };
+      } else {
+        // Production: this is a critical error
+        throw new Error('Parser received empty input in production - this indicates a critical failure');
+      }
     }
     
     // Execute parser

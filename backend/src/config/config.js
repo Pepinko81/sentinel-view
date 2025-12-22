@@ -170,14 +170,28 @@ function validateConfig() {
     }
   }
   
-  // Check fail2ban availability
-  if (config.fail2banAvailable) {
-    // Try to detect if fail2ban-client is available
-    const { execSync } = require('child_process');
-    try {
-      execSync('which fail2ban-client', { stdio: 'ignore' });
-    } catch (err) {
-      warnings.push('FAIL2BAN_AVAILABLE=true but fail2ban-client not found in PATH');
+  // Check fail2ban availability based on environment
+  const fail2banPaths = ['/usr/bin/fail2ban-client', '/usr/sbin/fail2ban-client'];
+  
+  if (config.nodeEnv === 'production') {
+    // Production: fail2ban MUST exist and be executable
+    const fail2banExists = fail2banPaths.some(p => {
+      try {
+        return fs.existsSync(p) && fs.accessSync(p, fs.constants.X_OK) === undefined;
+      } catch {
+        return false;
+      }
+    });
+    
+    if (!fail2banExists) {
+      errors.push('PRODUCTION ERROR: fail2ban-client not found or not executable');
+      errors.push(`Required paths: ${fail2banPaths.join(', ')}`);
+    }
+  } else {
+    // Development: just log if not found
+    const fail2banExists = fail2banPaths.some(p => fs.existsSync(p));
+    if (!fail2banExists) {
+      console.log('[CONFIG] fail2ban unavailable (dev mode)');
     }
   }
   

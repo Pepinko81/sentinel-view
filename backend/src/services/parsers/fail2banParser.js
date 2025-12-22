@@ -74,56 +74,56 @@ function parseFail2banStatus(output) {
     // Handles: "`- Jail list:\tnginx-404, nginx-admin-scanners"
     // Handles: "|  Jail list: nginx-404, nginx-admin-scanners"
     if (line.toLowerCase().includes('jail list') || line.toLowerCase().includes('number of jail')) {
-      let jailLine = '';
-      
-      // Remove leading characters: backticks, dashes, pipes, whitespace, tabs
-      const cleanedLine = line.replace(/^[`|\-|\s\t]+/, '').trim();
-      
-      // Try to extract from same line - handle tabs, colons, spaces
-      // Match: "Jail list:" followed by tab, colon, or space, then jail names
-      let sameLineMatch = cleanedLine.match(/jail\s*list[:\s\t]+(.+)/i);
-      if (!sameLineMatch) {
-        // Also try original line (might have special characters or tabs)
-        sameLineMatch = line.match(/jail\s*list[:\s\t]+(.+)/i);
-      }
-      if (!sameLineMatch) {
-        // More flexible - just look for "jail list" anywhere followed by content
-        sameLineMatch = line.match(/jail\s*list[:\s\t]*([^\n]+)/i);
-      }
-      
-      if (sameLineMatch && sameLineMatch[1]) {
-        jailLine = sameLineMatch[1].trim();
-      } else {
-        // Search forward for jail names (not just next line)
-        for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
-          const candidate = lines[j];
-          // Check if line contains jail-like content (comma-separated, alphanumeric)
-          if (candidate && (candidate.includes(',') || /^[a-zA-Z0-9._-]+/.test(candidate))) {
-            jailLine = candidate.replace(/^[`|\-|\s\t]+/, '').trim();
-            break;
-          }
-        }
-      }
-      
-      if (jailLine) {
-        // Split by comma and clean up
-        // Remove any remaining special characters
-        const jails = jailLine
-          .split(',')
-          .map(j => j.trim().replace(/^[`|\-|\s\t]+/, '').trim())
-          .filter(j => j && j !== '' && j !== '-');
+      if (line.toLowerCase().includes('jail list')) {
+        // Remove ALL leading symbols: backticks, dashes, pipes, whitespace, tabs
+        const cleaned = line.replace(/^[`|\-|\s\t]+/, '').trim();
+        const match = cleaned.match(/jail\s*list[:\s\t]+(.+)/i);
         
-        if (jails.length > 0) {
-          result.jails = jails;
-          // Log for debugging (only in development)
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`[FAIL2BAN PARSER] ✅ Extracted ${jails.length} jails: ${jails.join(', ')}`);
+        if (match && match[1]) {
+          const jails = match[1]
+            .split(',')
+            .map(j => j.trim())
+            .filter(j => j && j !== '' && j !== '-');
+          
+          // Validate against "Number of jail" if present
+          const numberMatch = output.match(/number\s+of\s+jail[:\s\t]+(\d+)/i);
+          if (numberMatch) {
+            const expectedCount = parseInt(numberMatch[1], 10);
+            if (jails.length !== expectedCount) {
+              const errorMsg = `Jail count mismatch: expected ${expectedCount}, parsed ${jails.length}. Line: ${JSON.stringify(line)}`;
+              if (process.env.NODE_ENV === 'production') {
+                throw new Error(errorMsg);
+              } else {
+                errors.push(errorMsg);
+                console.warn(`[FAIL2BAN PARSER] ${errorMsg}`);
+              }
+            }
           }
-        } else if (process.env.NODE_ENV === 'development') {
-          console.warn(`[FAIL2BAN PARSER] ⚠️ Found jail list but extracted 0 jails. Line: ${JSON.stringify(line)}, jailLine: ${JSON.stringify(jailLine)}`);
+          
+          if (jails.length === 0) {
+            const errorMsg = `Jail list parsing failed: extracted 0 jails from non-empty line: ${JSON.stringify(line)}`;
+            if (process.env.NODE_ENV === 'production') {
+              throw new Error(errorMsg);
+            } else {
+              errors.push(errorMsg);
+              console.warn(`[FAIL2BAN PARSER] ${errorMsg}`);
+            }
+          } else {
+            result.jails = jails;
+            // Log for debugging (only in development)
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[FAIL2BAN PARSER] ✅ Extracted ${jails.length} jails: ${jails.join(', ')}`);
+            }
+          }
+        } else {
+          const errorMsg = `Jail list parsing failed: regex did not match line: ${JSON.stringify(line)}`;
+          if (process.env.NODE_ENV === 'production') {
+            throw new Error(errorMsg);
+          } else {
+            errors.push(errorMsg);
+            console.warn(`[FAIL2BAN PARSER] ${errorMsg}`);
+          }
         }
-      } else if (process.env.NODE_ENV === 'development') {
-        console.warn(`[FAIL2BAN PARSER] ⚠️ Found "jail list" but couldn't extract jail names. Line: ${JSON.stringify(line)}`);
       }
     }
   }

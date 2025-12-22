@@ -122,32 +122,40 @@ router.get('/', async (req, res, next) => {
       // Check for fail2ban errors in stderr
       const errorCheck = detectFail2banError(stdout || '', stderr || '');
       
-      // If fail2ban-client is not found, this is normal in development/local environment
-      // Parse what we can (nginx/system data might still be available) and return safe defaults for fail2ban
+      // In production, fail2ban MUST work - fail loudly if not
       if (errorCheck.isError && errorCheck.errorType === 'command_not_found') {
-        // In development, fail2ban not being installed is normal - don't treat as error
-        // Try to parse nginx/system data if available
-        monitorData = safeParse(parseMonitorOutput, stdout || '', defaultMonitorOutput);
-        // Set fail2ban defaults (empty jails, etc.)
-        monitorData.fail2ban = {
-          status: 'unavailable',
-          jails: [],
-          totalBanned: 0,
-        };
-        monitorData.jails = [];
-        // Don't add error to response - this is expected in local dev
-        monitorData.errors = monitorData.errors || [];
-        // Only mark as partial if we actually have some data
-        if (monitorData.nginx && monitorData.nginx.totalRequests > 0) {
-          monitorData.partial = true;
+        if (config.nodeEnv === 'production') {
+          throw new Error(`CRITICAL: fail2ban-client not found in production: ${errorCheck.message}`);
+        } else {
+          // Development: fail2ban not being installed is normal
+          // Try to parse nginx/system data if available
+          monitorData = safeParse(parseMonitorOutput, stdout || '', defaultMonitorOutput);
+          // Set fail2ban defaults (empty jails, etc.)
+          monitorData.fail2ban = {
+            status: 'unavailable',
+            jails: [],
+            totalBanned: 0,
+          };
+          monitorData.jails = [];
+          // Don't add error to response - this is expected in local dev
+          monitorData.errors = monitorData.errors || [];
+          // Only mark as partial if we actually have some data
+          if (monitorData.nginx && monitorData.nginx.totalRequests > 0) {
+            monitorData.partial = true;
+          }
         }
       } else if (errorCheck.isError) {
-        // Other fail2ban errors - fail2ban is down, but we can still parse nginx/system data
-        // Try to parse what we can (nginx/system might still work)
-        monitorData = safeParse(parseMonitorOutput, stdout || '', defaultMonitorOutput);
-        monitorData.errors = monitorData.errors || [];
-        monitorData.errors.push(errorCheck.message);
-        monitorData.partial = true;
+        // Other fail2ban errors
+        if (config.nodeEnv === 'production') {
+          // In production, fail2ban errors are critical
+          throw new Error(`CRITICAL: fail2ban error in production: ${errorCheck.message}`);
+        } else {
+          // Development: try to parse what we can
+          monitorData = safeParse(parseMonitorOutput, stdout || '', defaultMonitorOutput);
+          monitorData.errors = monitorData.errors || [];
+          monitorData.errors.push(errorCheck.message);
+          monitorData.partial = true;
+        }
       } else {
         // Normal parsing
         monitorData = safeParse(parseMonitorOutput, stdout || '', defaultMonitorOutput);
@@ -172,6 +180,11 @@ router.get('/', async (req, res, next) => {
       // Check if it's a fail2ban-client not found error
       const isFail2banNotFound = scriptError.includes('fail2ban-client') || 
                                   scriptError.includes('command not found');
+      
+      // In production, fail2ban errors are critical
+      if (isFail2banNotFound && config.nodeEnv === 'production') {
+        throw new Error(`CRITICAL: Script execution failed in production: ${scriptError}`);
+      }
       
       // Return safe defaults with error (serialized)
       const errorResponse = serializeOverviewResponse({
