@@ -108,7 +108,7 @@ To test the integration:
 
 3. Test API endpoint:
    ```bash
-   curl -H "Authorization: Bearer your-token" http://localhost:3001/api/overview
+   curl -H "Authorization: Bearer your-token" http://localhost:3002/api/overview
    ```
 
 ## Future Enhancements

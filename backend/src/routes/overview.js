@@ -120,19 +120,34 @@ router.get('/', async (req, res, next) => {
       const { stdout, stderr } = scriptResult;
       
       // Check for fail2ban errors in stderr
-      const errorCheck = detectFail2banError(stdout, stderr);
+      const errorCheck = detectFail2banError(stdout || '', stderr || '');
+      
+      // If fail2ban-client is not found, return safe defaults immediately (no parsing needed)
+      if (errorCheck.isError && errorCheck.errorType === 'command_not_found') {
+        console.warn('fail2ban-client not found, returning safe defaults');
+        const errorResponse = serializeOverviewResponse({
+          ...safeDefaults,
+          errors: [errorCheck.message],
+          partial: true,
+          serverStatus: 'offline',
+        });
+        cache.set(cacheKey, errorResponse, ERROR_CACHE_TTL);
+        res.setHeader('X-API-Version', API_VERSION);
+        return res.json(errorResponse);
+      }
+      
       if (errorCheck.isError) {
         // fail2ban is down, but we can still parse nginx/system data
         console.warn('fail2ban error detected:', errorCheck.message);
         
         // Try to parse what we can (nginx/system might still work)
-        monitorData = safeParse(parseMonitorOutput, stdout, defaultMonitorOutput);
+        monitorData = safeParse(parseMonitorOutput, stdout || '', defaultMonitorOutput);
         monitorData.errors = monitorData.errors || [];
         monitorData.errors.push(errorCheck.message);
         monitorData.partial = true;
       } else {
         // Normal parsing
-        monitorData = safeParse(parseMonitorOutput, stdout, defaultMonitorOutput);
+        monitorData = safeParse(parseMonitorOutput, stdout || '', defaultMonitorOutput);
       }
     } catch (err) {
       console.error('Failed to execute monitor-security.sh:', err.message);
@@ -151,12 +166,16 @@ router.get('/', async (req, res, next) => {
         return res.json(response);
       }
       
+      // Check if it's a fail2ban-client not found error
+      const isFail2banNotFound = scriptError.includes('fail2ban-client') || 
+                                  scriptError.includes('command not found');
+      
       // Return safe defaults with error (serialized)
       const errorResponse = serializeOverviewResponse({
         ...safeDefaults,
         errors: [`Script execution failed: ${scriptError}`],
         partial: true,
-        serverStatus: 'error',
+        serverStatus: isFail2banNotFound ? 'offline' : 'error',
       });
       
       cache.set(cacheKey, errorResponse, ERROR_CACHE_TTL);

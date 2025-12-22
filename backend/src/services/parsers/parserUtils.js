@@ -12,13 +12,22 @@
  */
 function safeParse(parserFn, output, defaults = {}) {
   try {
-    // Validate input
-    if (!output || typeof output !== 'string') {
+    // Validate input - handle null/undefined gracefully
+    if (output === null || output === undefined) {
       return { 
         ...defaults, 
-        errors: ['Invalid input: output is not a string'], 
+        errors: ['Invalid input: output is null or undefined'], 
         partial: true 
       };
+    }
+    
+    // Convert to string if not already (handles numbers, objects, etc.)
+    if (typeof output !== 'string') {
+      // Try to convert to string, but log warning
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`[PARSER] Output is not a string (type: ${typeof output}), converting...`);
+      }
+      output = String(output);
     }
     
     if (output.trim().length === 0) {

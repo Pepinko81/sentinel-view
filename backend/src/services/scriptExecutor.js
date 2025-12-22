@@ -65,6 +65,20 @@ async function executeScript(scriptName, args = [], options = {}) {
       throw new Error(`Script not found: ${scriptPath}`);
     }
     
+    // Handle fail2ban-client not found - return empty output instead of throwing
+    // This allows graceful degradation when fail2ban is not installed
+    if (error.stderr && (
+      error.stderr.includes('fail2ban-client: command not found') ||
+      error.stderr.includes('command not found') ||
+      error.stderr.includes('fail2ban-client command not found')
+    )) {
+      // Return empty output with error in stderr for parser to handle gracefully
+      return { 
+        stdout: '', 
+        stderr: error.stderr || 'fail2ban-client command not found' 
+      };
+    }
+    
     // Return stderr for non-zero exit codes (some scripts use exit codes for status)
     if (error.stdout || error.stderr) {
       return {
