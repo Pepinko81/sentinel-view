@@ -4,6 +4,8 @@ const { executeScript } = require('../services/scriptExecutor');
 const { parseMonitorOutput, defaultMonitorOutput } = require('../services/parsers/monitorParser');
 const { parseNginxStats, defaultNginxStats } = require('../services/parsers/nginxParser');
 const { safeParse, detectFail2banError } = require('../services/parsers/parserUtils');
+const { serializeNginxResponse } = require('../services/serializers/apiSerializer');
+const { API_VERSION } = require('../config/api');
 const cache = require('../services/cache');
 const config = require('../config/config');
 
@@ -19,6 +21,7 @@ router.get('/', async (req, res, next) => {
     const cached = cache.get(cacheKey);
     
     if (cached) {
+      res.setHeader('X-API-Version', API_VERSION);
       return res.json(cached);
     }
     
@@ -75,8 +78,12 @@ router.get('/', async (req, res, next) => {
       };
     }
     
-    cache.set(cacheKey, stats, config.cache.nginxTTL);
-    res.json(stats);
+    // Serialize to ensure exact schema match
+    const response = serializeNginxResponse(stats);
+    
+    cache.set(cacheKey, response, config.cache.nginxTTL);
+    res.setHeader('X-API-Version', API_VERSION);
+    res.json(response);
   } catch (err) {
     next(err);
   }

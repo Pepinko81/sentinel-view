@@ -3,10 +3,11 @@ const router = express.Router();
 const { executeScript } = require('../services/scriptExecutor');
 const { parseMonitorOutput, defaultMonitorOutput } = require('../services/parsers/monitorParser');
 const { parseQuickCheck } = require('../services/parsers/monitorParser');
-const { parseFail2banStatus, extractJailNames, defaultFail2banStatus } = require('../services/parsers/fail2banParser');
 const { detectFail2banError, safeParse } = require('../services/parsers/parserUtils');
+const { serializeJailsResponse, serializeJailResponse } = require('../services/serializers/apiSerializer');
 const { inferCategory, inferSeverity } = require('../utils/jailClassifier');
 const { isValidJailName } = require('../utils/validators');
+const { API_VERSION } = require('../config/api');
 const cache = require('../services/cache');
 const config = require('../config/config');
 
@@ -22,6 +23,7 @@ router.get('/', async (req, res, next) => {
     const cached = cache.get(cacheKey);
     
     if (cached) {
+      res.setHeader('X-API-Version', API_VERSION);
       return res.json(cached);
     }
     
@@ -62,12 +64,16 @@ router.get('/', async (req, res, next) => {
         
         const errorCheck = detectFail2banError(quickOutput, quickStderr);
         if (errorCheck.isError) {
-          return res.json({
+          const errorResponse = serializeJailsResponse({
             ...safeDefaults,
             errors: [errorCheck.message],
             partial: true,
             serverStatus: 'offline',
           });
+          
+          cache.set(cacheKey, errorResponse, config.cache.jailsTTL);
+          res.setHeader('X-API-Version', API_VERSION);
+          return res.json(errorResponse);
         }
         
         const quickData = safeParse(parseQuickCheck, quickOutput, {
@@ -86,7 +92,7 @@ router.get('/', async (req, res, next) => {
           filter: jailName,
         }));
         
-        const response = {
+        const rawResponse = {
           jails,
           lastUpdated: new Date().toISOString(),
           serverStatus: quickData.errors && quickData.errors.length > 0 ? 'partial' : 'online',
@@ -94,15 +100,21 @@ router.get('/', async (req, res, next) => {
           partial: quickData.partial || false,
         };
         
+        const response = serializeJailsResponse(rawResponse);
+        
         cache.set(cacheKey, response, config.cache.jailsTTL);
+        res.setHeader('X-API-Version', API_VERSION);
         return res.json(response);
       } catch (fallbackErr) {
         console.error('Fallback script also failed:', fallbackErr.message);
-        return res.json({
+        const errorResponse = serializeJailsResponse({
           ...safeDefaults,
           errors: [`Script execution failed: ${err.message}`, `Fallback failed: ${fallbackErr.message}`],
           partial: true,
         });
+        
+        res.setHeader('X-API-Version', API_VERSION);
+        return res.json(errorResponse);
       }
     }
     
@@ -149,7 +161,7 @@ router.get('/', async (req, res, next) => {
       serverStatus = fail2banErrors.length > 0 ? 'offline' : 'partial';
     }
     
-    const response = {
+    const rawResponse = {
       jails,
       lastUpdated: new Date().toISOString(),
       serverStatus,
@@ -157,7 +169,11 @@ router.get('/', async (req, res, next) => {
       partial: monitorData.partial || false,
     };
     
+    // Serialize to ensure exact frontend schema match
+    const response = serializeJailsResponse(rawResponse);
+    
     cache.set(cacheKey, response, config.cache.jailsTTL);
+    res.setHeader('X-API-Version', API_VERSION);
     res.json(response);
   } catch (err) {
     next(err);
@@ -186,6 +202,7 @@ router.get('/:name', async (req, res, next) => {
     const cached = cache.get(cacheKey);
     
     if (cached) {
+      res.setHeader('X-API-Version', API_VERSION);
       return res.json(cached);
     }
     
@@ -214,20 +231,26 @@ router.get('/:name', async (req, res, next) => {
       // Check for fail2ban errors
       const errorCheck = detectFail2banError(stdout, stderr);
       if (errorCheck.isError) {
-        return res.status(503).json({
+        const errorResponse = serializeJailResponse({
           ...safeDefaults,
           errors: [errorCheck.message],
           partial: true,
         });
+        
+        res.setHeader('X-API-Version', API_VERSION);
+        return res.status(503).json(errorResponse);
       }
       
       monitorData = safeParse(parseMonitorOutput, stdout, defaultMonitorOutput);
     } catch (err) {
-      return res.status(503).json({
+      const errorResponse = serializeJailResponse({
         ...safeDefaults,
         errors: [`Failed to connect to fail2ban: ${err.message}`],
         partial: true,
       });
+      
+      res.setHeader('X-API-Version', API_VERSION);
+      return res.status(503).json(errorResponse);
     }
     
     // Check if jail exists
@@ -253,7 +276,7 @@ router.get('/:name', async (req, res, next) => {
       banCount: 1,
     }));
     
-    const response = {
+    const rawResponse = {
       name: jailName,
       enabled: bannedIPs.length > 0,
       bannedIPs: bannedIPsFormatted,
@@ -268,7 +291,11 @@ router.get('/:name', async (req, res, next) => {
       partial: monitorData.partial || false,
     };
     
+    // Serialize to ensure exact frontend schema match
+    const response = serializeJailResponse(rawResponse);
+    
     cache.set(cacheKey, response, config.cache.jailsTTL);
+    res.setHeader('X-API-Version', API_VERSION);
     res.json(response);
   } catch (err) {
     next(err);
