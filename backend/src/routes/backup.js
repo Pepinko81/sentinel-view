@@ -3,7 +3,9 @@ const router = express.Router();
 const { executeScript } = require('../services/scriptExecutor');
 const { parseBackupOutput, defaultBackupOutput } = require('../services/parsers/backupParser');
 const { safeParse } = require('../services/parsers/parserUtils');
+const { serializeBackupResponse } = require('../services/serializers/apiSerializer');
 const { backupLimiter } = require('../middleware/rateLimiter');
+const { API_VERSION } = require('../config/api');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -51,16 +53,11 @@ router.post('/', async (req, res, next) => {
       }
     }
     
-    res.json({
-      success: backupData.success,
-      filename: backupData.filename || 'unknown',
-      path: backupData.path || 'unknown',
-      size: backupData.size || 0,
-      sizeFormatted: backupData.sizeFormatted || '0 B',
-      timestamp: new Date().toISOString(),
-      errors: backupData.errors || [],
-      partial: backupData.partial || false,
-    });
+    // Serialize to ensure exact schema match
+    const response = serializeBackupResponse(backupData);
+    
+    res.setHeader('X-API-Version', API_VERSION);
+    res.json(response);
   } catch (err) {
     next(err);
   }

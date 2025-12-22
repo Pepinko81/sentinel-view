@@ -4,6 +4,8 @@ const { executeScript } = require('../services/scriptExecutor');
 const { parseMonitorOutput, defaultMonitorOutput } = require('../services/parsers/monitorParser');
 const { parseSystemInfo, defaultSystemInfo } = require('../services/parsers/systemParser');
 const { safeParse, detectFail2banError } = require('../services/parsers/parserUtils');
+const { serializeSystemResponse } = require('../services/serializers/apiSerializer');
+const { API_VERSION } = require('../config/api');
 const cache = require('../services/cache');
 const config = require('../config/config');
 const os = require('os');
@@ -20,6 +22,7 @@ router.get('/', async (req, res, next) => {
     const cached = cache.get(cacheKey);
     
     if (cached) {
+      res.setHeader('X-API-Version', API_VERSION);
       return res.json(cached);
     }
     
@@ -85,8 +88,12 @@ router.get('/', async (req, res, next) => {
       };
     }
     
-    cache.set(cacheKey, systemInfo, config.cache.systemTTL);
-    res.json(systemInfo);
+    // Serialize to ensure exact schema match
+    const response = serializeSystemResponse(systemInfo);
+    
+    cache.set(cacheKey, response, config.cache.systemTTL);
+    res.setHeader('X-API-Version', API_VERSION);
+    res.json(response);
   } catch (err) {
     next(err);
   }

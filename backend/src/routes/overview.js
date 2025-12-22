@@ -4,7 +4,9 @@ const { executeScript } = require('../services/scriptExecutor');
 const { parseMonitorOutput, defaultMonitorOutput } = require('../services/parsers/monitorParser');
 const { detectFail2banError } = require('../services/parsers/parserUtils');
 const { safeParse } = require('../services/parsers/parserUtils');
-const { inferCategory, inferSeverity } = require('../utils/jailClassifier');
+const { serializeOverviewResponse } = require('../services/serializers/apiSerializer');
+const { inferCategory } = require('../utils/jailClassifier');
+const { API_VERSION } = require('../config/api');
 const cache = require('../services/cache');
 const config = require('../config/config');
 const os = require('os');
@@ -21,6 +23,7 @@ router.get('/', async (req, res, next) => {
     const cached = cache.get(cacheKey);
     
     if (cached) {
+      res.setHeader('X-API-Version', API_VERSION);
       return res.json(cached);
     }
     
@@ -78,15 +81,16 @@ router.get('/', async (req, res, next) => {
       console.error('Failed to execute monitor-security.sh:', err.message);
       scriptError = err.message;
       
-      // Return safe defaults with error
-      const errorResponse = {
+      // Return safe defaults with error (serialized)
+      const errorResponse = serializeOverviewResponse({
         ...safeDefaults,
         errors: [`Script execution failed: ${scriptError}`],
         partial: true,
         serverStatus: 'error',
-      };
+      });
       
       cache.set(cacheKey, errorResponse, config.cache.overviewTTL);
+      res.setHeader('X-API-Version', API_VERSION);
       return res.json(errorResponse);
     }
     
@@ -111,22 +115,8 @@ router.get('/', async (req, res, next) => {
       }
     }
     
-    // Transform monitor data to frontend format
-    const jails = (monitorData.jails || []).map(jail => ({
-      name: jail.name,
-      enabled: (jail.bannedIPs && jail.bannedIPs.length > 0) || false,
-      bannedIPs: (jail.bannedIPs || []).map(ip => ({
-        ip,
-        bannedAt: new Date().toISOString(), // fail2ban doesn't provide timestamps
-        banCount: 1,
-      })),
-      category: inferCategory(jail.name),
-      filter: jail.name,
-      maxRetry: null,
-      banTime: null,
-    }));
-    
-    const response = {
+    // Transform monitor data to frontend format using serializer
+    const rawResponse = {
       timestamp: new Date().toISOString(),
       server: {
         hostname: monitorData.hostname || os.hostname(),
@@ -136,7 +126,19 @@ router.get('/', async (req, res, next) => {
         active_jails: (monitorData.fail2ban?.jails || []).length,
         total_banned_ips: monitorData.fail2ban?.totalBanned || 0,
       },
-      jails,
+      jails: (monitorData.jails || []).map(jail => ({
+        name: jail.name,
+        enabled: (jail.bannedIPs && jail.bannedIPs.length > 0) || false,
+        bannedIPs: (jail.bannedIPs || []).map(ip => ({
+          ip,
+          bannedAt: new Date().toISOString(),
+          banCount: 1,
+        })),
+        category: inferCategory(jail.name),
+        filter: jail.name,
+        maxRetry: null,
+        banTime: null,
+      })),
       nginx: {
         404_count: monitorData.nginx?.errors404 || 0,
         admin_scans: monitorData.nginx?.adminScans || 0,
@@ -153,7 +155,11 @@ router.get('/', async (req, res, next) => {
       serverStatus,
     };
     
+    // Serialize to ensure exact frontend schema match
+    const response = serializeOverviewResponse(rawResponse);
+    
     cache.set(cacheKey, response, config.cache.overviewTTL);
+    res.setHeader('X-API-Version', API_VERSION);
     res.json(response);
   } catch (err) {
     next(err);
