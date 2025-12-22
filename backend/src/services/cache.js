@@ -46,16 +46,67 @@ class Cache {
   /**
    * Delete cache entry
    * @param {string} key - Cache key
+   * @returns {boolean} - True if entry was deleted
    */
   delete(key) {
-    this.cache.delete(key);
+    return this.cache.delete(key);
   }
   
   /**
-   * Clear all cache
+   * Delete multiple cache entries by pattern
+   * @param {string|RegExp} pattern - Pattern to match keys
+   * @returns {number} - Number of entries deleted
+   */
+  deleteByPattern(pattern) {
+    let deleted = 0;
+    const regex = typeof pattern === 'string' 
+      ? new RegExp(pattern.replace(/\*/g, '.*')) 
+      : pattern;
+    
+    for (const key of this.cache.keys()) {
+      if (regex.test(key)) {
+        this.cache.delete(key);
+        deleted++;
+      }
+    }
+    
+    return deleted;
+  }
+  
+  /**
+   * Invalidate cache entries for a specific endpoint
+   * @param {string} endpoint - Endpoint path (e.g., '/api/jails')
+   * @returns {number} - Number of entries invalidated
+   */
+  invalidateEndpoint(endpoint) {
+    return this.deleteByPattern(`cache:.*:${endpoint}`);
+  }
+  
+  /**
+   * Invalidate all cache entries
+   * @returns {number} - Number of entries cleared
    */
   clear() {
+    const size = this.cache.size;
     this.cache.clear();
+    return size;
+  }
+  
+  /**
+   * Check if a key exists in cache (even if expired)
+   * @param {string} key - Cache key
+   * @returns {boolean} - True if key exists
+   */
+  has(key) {
+    return this.cache.has(key);
+  }
+  
+  /**
+   * Get all cache keys
+   * @returns {string[]} - Array of cache keys
+   */
+  keys() {
+    return Array.from(this.cache.keys());
   }
   
   /**
@@ -66,12 +117,22 @@ class Cache {
     const now = Date.now();
     let valid = 0;
     let expired = 0;
+    let totalSize = 0;
+    const endpoints = new Set();
     
-    for (const entry of this.cache.values()) {
+    for (const [key, entry] of this.cache.entries()) {
       if (entry.expiresAt > now) {
         valid++;
+        // Estimate size (rough approximation)
+        totalSize += JSON.stringify(entry.value).length;
       } else {
         expired++;
+      }
+      
+      // Extract endpoint from cache key pattern: cache:GET:/api/overview
+      const match = key.match(/cache:[^:]+:(.+)/);
+      if (match) {
+        endpoints.add(match[1]);
       }
     }
     
@@ -79,7 +140,24 @@ class Cache {
       total: this.cache.size,
       valid,
       expired,
+      totalSizeBytes: totalSize,
+      totalSizeFormatted: this.formatBytes(totalSize),
+      endpoints: Array.from(endpoints),
+      hitRate: null, // Can be calculated with additional tracking
     };
+  }
+  
+  /**
+   * Format bytes to human-readable string
+   * @param {number} bytes - Bytes to format
+   * @returns {string} - Formatted string
+   */
+  formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   }
   
   /**
