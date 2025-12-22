@@ -12,36 +12,23 @@
  */
 function safeParse(parserFn, output, defaults = {}) {
   try {
-    const isDevelopment = process.env.NODE_ENV === 'development';
-    
-    // Validate input - handle null/undefined gracefully
+    // Validate input - empty/null output is always an error
     if (output === null || output === undefined) {
-      if (isDevelopment) {
-        // Development: return defaults silently
-        return { ...defaults };
-      } else {
-        // Production: this is a critical error
-        throw new Error('Parser received null/undefined input in production - this indicates a critical failure');
-      }
+      const errorMsg = 'Parser received null/undefined input - script execution failed';
+      console.error(`[PARSER] ERROR: ${errorMsg}`);
+      throw new Error(errorMsg);
     }
     
     // Convert to string if not already (handles numbers, objects, etc.)
     if (typeof output !== 'string') {
-      // Try to convert to string, but log warning
-      if (isDevelopment) {
-        console.warn(`[PARSER] Output is not a string (type: ${typeof output}), converting...`);
-      }
+      console.warn(`[PARSER] Output is not a string (type: ${typeof output}), converting...`);
       output = String(output);
     }
     
     if (output.trim().length === 0) {
-      if (isDevelopment) {
-        // Development: return defaults silently
-        return { ...defaults };
-      } else {
-        // Production: this is a critical error
-        throw new Error('Parser received empty input in production - this indicates a critical failure');
-      }
+      const errorMsg = 'Parser received empty input - script returned no output';
+      console.error(`[PARSER] ERROR: ${errorMsg}`);
+      throw new Error(errorMsg);
     }
     
     // Execute parser
@@ -222,15 +209,15 @@ function detectFail2banError(output, stderr = '') {
     };
   }
   
-  // Check for command not found - but only treat as error if not in development
-  // In development/local environment, fail2ban might not be installed (normal)
+  // Check for command not found - this is always an error
+  // Scripts should handle system binary availability, but if they report "not found",
+  // it means the script itself failed (not backend's responsibility to check)
   if (lower.includes('command not found') ||
       lower.includes('fail2ban-client: command not found')) {
-    const isDevelopment = process.env.NODE_ENV === 'development';
     return {
-      isError: !isDevelopment, // Only error in production
+      isError: true,
       errorType: 'command_not_found',
-      message: 'fail2ban-client command not found'
+      message: 'fail2ban-client command not found (reported by script)'
     };
   }
   

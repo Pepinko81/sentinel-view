@@ -119,45 +119,23 @@ router.get('/', async (req, res, next) => {
       
       const { stdout, stderr } = scriptResult;
       
-      // Check for fail2ban errors in stderr
+      // Parse script output - scripts are single source of truth
+      // If script failed, it will be in stderr and parser will detect it
       const errorCheck = detectFail2banError(stdout || '', stderr || '');
       
-      // In production, fail2ban MUST work - fail loudly if not
-      if (errorCheck.isError && errorCheck.errorType === 'command_not_found') {
+      if (errorCheck.isError) {
+        // Script reported an error - parse what we can but include error
+        monitorData = safeParse(parseMonitorOutput, stdout || '', defaultMonitorOutput);
+        monitorData.errors = monitorData.errors || [];
+        monitorData.errors.push(errorCheck.message);
+        monitorData.partial = true;
+        
+        // In production, script errors are critical
         if (config.nodeEnv === 'production') {
-          throw new Error(`CRITICAL: fail2ban-client not found in production: ${errorCheck.message}`);
-        } else {
-          // Development: fail2ban not being installed is normal
-          // Try to parse nginx/system data if available
-          monitorData = safeParse(parseMonitorOutput, stdout || '', defaultMonitorOutput);
-          // Set fail2ban defaults (empty jails, etc.)
-          monitorData.fail2ban = {
-            status: 'unavailable',
-            jails: [],
-            totalBanned: 0,
-          };
-          monitorData.jails = [];
-          // Don't add error to response - this is expected in local dev
-          monitorData.errors = monitorData.errors || [];
-          // Only mark as partial if we actually have some data
-          if (monitorData.nginx && monitorData.nginx.totalRequests > 0) {
-            monitorData.partial = true;
-          }
-        }
-      } else if (errorCheck.isError) {
-        // Other fail2ban errors
-        if (config.nodeEnv === 'production') {
-          // In production, fail2ban errors are critical
-          throw new Error(`CRITICAL: fail2ban error in production: ${errorCheck.message}`);
-        } else {
-          // Development: try to parse what we can
-          monitorData = safeParse(parseMonitorOutput, stdout || '', defaultMonitorOutput);
-          monitorData.errors = monitorData.errors || [];
-          monitorData.errors.push(errorCheck.message);
-          monitorData.partial = true;
+          throw new Error(`CRITICAL: Script execution error in production: ${errorCheck.message}`);
         }
       } else {
-        // Normal parsing
+        // Normal parsing - script executed successfully
         monitorData = safeParse(parseMonitorOutput, stdout || '', defaultMonitorOutput);
       }
     } catch (err) {
@@ -177,21 +155,18 @@ router.get('/', async (req, res, next) => {
         return res.json(response);
       }
       
-      // Check if it's a fail2ban-client not found error
-      const isFail2banNotFound = scriptError.includes('fail2ban-client') || 
-                                  scriptError.includes('command not found');
-      
-      // In production, fail2ban errors are critical
-      if (isFail2banNotFound && config.nodeEnv === 'production') {
+      // Script execution failed - this is always an error
+      // In production, this is critical
+      if (config.nodeEnv === 'production') {
         throw new Error(`CRITICAL: Script execution failed in production: ${scriptError}`);
       }
       
-      // Return safe defaults with error (serialized)
+      // Development: return error response (no silent fallbacks)
       const errorResponse = serializeOverviewResponse({
         ...safeDefaults,
         errors: [`Script execution failed: ${scriptError}`],
         partial: true,
-        serverStatus: isFail2banNotFound ? 'offline' : 'error',
+        serverStatus: 'error',
       });
       
       cache.set(cacheKey, errorResponse, ERROR_CACHE_TTL);

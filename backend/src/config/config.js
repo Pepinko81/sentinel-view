@@ -170,30 +170,9 @@ function validateConfig() {
     }
   }
   
-  // Check fail2ban availability based on environment
-  const fail2banPaths = ['/usr/bin/fail2ban-client', '/usr/sbin/fail2ban-client'];
-  
-  if (config.nodeEnv === 'production') {
-    // Production: fail2ban MUST exist and be executable
-    const fail2banExists = fail2banPaths.some(p => {
-      try {
-        return fs.existsSync(p) && fs.accessSync(p, fs.constants.X_OK) === undefined;
-      } catch {
-        return false;
-      }
-    });
-    
-    if (!fail2banExists) {
-      errors.push('PRODUCTION ERROR: fail2ban-client not found or not executable');
-      errors.push(`Required paths: ${fail2banPaths.join(', ')}`);
-    }
-  } else {
-    // Development: just log if not found
-    const fail2banExists = fail2banPaths.some(p => fs.existsSync(p));
-    if (!fail2banExists) {
-      console.log('[CONFIG] fail2ban unavailable (dev mode)');
-    }
-  }
+  // Backend does NOT check for fail2ban availability
+  // Bash scripts are the single source of truth for system binaries
+  // Scripts handle fail2ban-client execution and will fail if not available
   
   // Fail if required variables are missing
   if (missing.length > 0) {
