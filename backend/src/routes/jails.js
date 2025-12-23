@@ -465,31 +465,64 @@ router.post('/:name/enable', async (req, res, next) => {
 
     // Ensure filter file exists before attempting to start
     // This prevents "jail does not exist" errors when filter is missing
+    let filterCheck;
     try {
-      const filterCheck = await ensureFilterExists(jailName);
+      filterCheck = await ensureFilterExists(jailName);
+      
+      // Log filter check result
+      console.log(`[JAIL ENABLE] Filter check for ${jailName}:`, {
+        filterName: filterCheck.filterName,
+        exists: filterCheck.exists,
+        created: filterCheck.created,
+        message: filterCheck.message,
+      });
       
       if (!filterCheck.exists && !filterCheck.created) {
         // Filter file doesn't exist and couldn't be created automatically
+        const hasTemplate = filterCheck.filterName && filterCheck.filterName in FILTER_TEMPLATES;
+        
         return res.status(500).json({
           success: false,
-          error: `Filter file missing: ${filterCheck.filterName || 'unknown'}.conf. ${filterCheck.message}`,
+          error: `Filter file missing: ${filterCheck.filterName || 'unknown'}.conf`,
           details: {
             filterName: filterCheck.filterName,
             message: filterCheck.message,
-            suggestion: filterCheck.filterName && filterCheck.filterName in FILTER_TEMPLATES
-              ? 'Filter template exists but creation failed. Check sudo permissions.'
-              : 'No template available for this filter. Please create it manually.',
+            suggestion: hasTemplate
+              ? 'Filter template exists but creation failed. Check sudo permissions and backend logs.'
+              : `No template available for filter "${filterCheck.filterName}". Please create /etc/fail2ban/filter.d/${filterCheck.filterName}.conf manually.`,
+            troubleshooting: hasTemplate
+              ? [
+                  '1. Check backend logs for filter creation errors',
+                  '2. Verify sudoers includes SENTINEL_FILTER_MGMT',
+                  '3. Test manually: sudo /home/pepinko/sentinel-view/backend/scripts/create-filter-file.sh <filter-name> <temp-file>',
+                  '4. Check script permissions: ls -la backend/scripts/create-filter-file.sh',
+                ]
+              : [
+                  `1. Create filter file manually: sudo nano /etc/fail2ban/filter.d/${filterCheck.filterName}.conf`,
+                  '2. Use existing filter as template',
+                  '3. Test filter: sudo fail2ban-regex /var/log/nginx/access.log /etc/fail2ban/filter.d/<filter>.conf',
+                ],
           },
         });
       }
       
       // If filter was just created, log it
       if (filterCheck.created) {
-        console.log(`[JAIL ENABLE] Auto-created filter file: ${filterCheck.filterName}.conf`);
+        console.log(`[JAIL ENABLE] ✅ Auto-created filter file: ${filterCheck.filterName}.conf`);
+      } else if (filterCheck.exists) {
+        console.log(`[JAIL ENABLE] ✅ Filter file already exists: ${filterCheck.filterName}.conf`);
       }
     } catch (err) {
-      // If filter check fails, still try to start (maybe filter exists but check failed)
-      console.warn(`[JAIL ENABLE] Filter check failed for ${jailName}: ${err.message}`);
+      // If filter check fails completely, return error instead of trying to start
+      console.error(`[JAIL ENABLE] ❌ Filter check failed for ${jailName}:`, err);
+      return res.status(500).json({
+        success: false,
+        error: `Failed to check/create filter file: ${err.message}`,
+        details: {
+          jailName,
+          suggestion: 'Check backend logs for details. Filter file may need to be created manually.',
+        },
+      });
     }
 
     // Execute start command

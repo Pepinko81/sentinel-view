@@ -237,21 +237,58 @@ async function createFilterFile(filterName) {
     fs.writeFileSync(tempFile, template, 'utf8');
     
     // Use helper script to create filter file
-    const scriptPath = path.join(__dirname, '../scripts/create-filter-file.sh');
+    // Use absolute path to match sudoers configuration
+    const scriptPath = path.resolve(__dirname, '../scripts/create-filter-file.sh');
+    
+    // Verify script exists and is executable
+    if (!fs.existsSync(scriptPath)) {
+      throw new Error(`Helper script not found: ${scriptPath}`);
+    }
+    
+    // Verify script is executable
+    try {
+      const stats = fs.statSync(scriptPath);
+      if (!(stats.mode & parseInt('111', 8))) {
+        console.warn(`[FILTER MANAGER] Script exists but may not be executable: ${scriptPath}`);
+      }
+    } catch (err) {
+      console.warn(`[FILTER MANAGER] Could not check script permissions: ${err.message}`);
+    }
+    
     const args = [scriptPath, filterName, tempFile];
     
-    await execFileAsync(SUDO_PATH, args, {
+    console.log(`[FILTER MANAGER] Creating filter file: ${filterName}.conf`);
+    console.log(`[FILTER MANAGER] Using script: ${scriptPath}`);
+    console.log(`[FILTER MANAGER] Temp file: ${tempFile}`);
+    
+    const { stdout, stderr } = await execFileAsync(SUDO_PATH, args, {
       timeout: 10000,
       maxBuffer: 1024 * 1024,
       encoding: 'utf8',
     });
+    
+    // Log script output
+    if (stdout) {
+      console.log(`[FILTER MANAGER] Script stdout: ${stdout.trim()}`);
+    }
+    if (stderr) {
+      console.warn(`[FILTER MANAGER] Script stderr: ${stderr.trim()}`);
+    }
+    
+    // Verify file was created
+    if (!fs.existsSync(filterPath)) {
+      throw new Error(`Filter file was not created at ${filterPath} despite script success`);
+    }
     
     // Clean up temp file
     try {
       fs.unlinkSync(tempFile);
     } catch (err) {
       // Ignore cleanup errors
+      console.warn(`[FILTER MANAGER] Failed to cleanup temp file: ${err.message}`);
     }
+    
+    console.log(`[FILTER MANAGER] ✅ Successfully created filter file: ${filterPath}`);
     
     return {
       created: true,
@@ -259,10 +296,19 @@ async function createFilterFile(filterName) {
       message: `Filter file created successfully: ${filterPath}`,
     };
   } catch (err) {
+    console.error(`[FILTER MANAGER] ❌ Failed to create filter file ${filterName}.conf:`, err);
+    console.error(`[FILTER MANAGER] Error details:`, {
+      message: err.message,
+      code: err.code,
+      signal: err.signal,
+      stdout: err.stdout,
+      stderr: err.stderr,
+    });
+    
     return {
       created: false,
       path: filterPath,
-      message: `Failed to create filter file: ${err.message}`,
+      message: `Failed to create filter file: ${err.message}. Check backend logs for details.`,
     };
   }
 }
