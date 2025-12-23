@@ -215,10 +215,116 @@ async function verifyJailState(jailName) {
   }
 }
 
+/**
+ * Restart fail2ban service
+ * Executes: sudo /usr/bin/systemctl restart fail2ban
+ * Waits for service to come back and verifies status
+ * 
+ * @returns {Promise<{ success: boolean, message: string }>}
+ */
+async function restartFail2ban() {
+  const SYSTEMCTL_PATH = process.env.SYSTEMCTL_PATH || '/usr/bin/systemctl';
+  const FAIL2BAN_SERVICE = 'fail2ban';
+  
+  // Basic safety: only run in environments where fail2ban is expected
+  if (!config.fail2banAvailable && config.nodeEnv === 'production') {
+    throw new Error('Fail2ban is marked as unavailable in production. Restart blocked.');
+  }
+
+  const args = [SYSTEMCTL_PATH, 'restart', FAIL2BAN_SERVICE];
+  const command = SUDO_PATH;
+
+  appendAuditLog({
+    jail: null,
+    action: 'restart_service',
+    step: 'before_exec',
+    command,
+    args,
+    result: 'pending',
+  });
+
+  try {
+    // Execute restart command
+    const { stdout, stderr } = await execFileAsync(command, args, {
+      timeout: config.scriptTimeout || 30000,
+      maxBuffer: 1024 * 1024,
+      encoding: 'utf8',
+    });
+
+    appendAuditLog({
+      jail: null,
+      action: 'restart_service',
+      step: 'after_exec',
+      command,
+      args,
+      result: 'success',
+      stdout: stdout.trim(),
+      stderr: stderr.trim(),
+    });
+
+    // Wait a moment for service to stabilize
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Verify service is running
+    try {
+      const statusArgs = [SYSTEMCTL_PATH, 'is-active', FAIL2BAN_SERVICE];
+      const { stdout: statusStdout } = await execFileAsync(SUDO_PATH, statusArgs, {
+        timeout: 10000,
+        maxBuffer: 1024,
+        encoding: 'utf8',
+      });
+
+      const isActive = statusStdout.trim() === 'active';
+      
+      if (!isActive) {
+        throw new Error(`Service restart completed but status is not 'active': ${statusStdout.trim()}`);
+      }
+
+      // Additional verification: check fail2ban-client status
+      try {
+        await getGlobalFail2banStatus();
+      } catch (err) {
+        // If fail2ban-client status fails, service might still be starting
+        // Wait a bit more and try once more
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        await getGlobalFail2banStatus();
+      }
+
+      return {
+        success: true,
+        message: 'Fail2ban service restarted successfully',
+      };
+    } catch (verifyErr) {
+      appendAuditLog({
+        jail: null,
+        action: 'restart_service',
+        step: 'verification_failed',
+        command,
+        args,
+        result: 'error',
+        error: verifyErr.message,
+      });
+      throw new Error(`Restart completed but verification failed: ${verifyErr.message}`);
+    }
+  } catch (err) {
+    appendAuditLog({
+      jail: null,
+      action: 'restart_service',
+      step: 'after_exec',
+      command,
+      args,
+      result: 'error',
+      error: err.message,
+    });
+    throw err;
+  }
+}
+
 module.exports = {
   runFail2banAction,
   verifyJailState,
   getGlobalFail2banStatus,
+  restartFail2ban,
   appendAuditLog,
 };
 

@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Shield, AlertCircle, RefreshCw } from "lucide-react";
+import { Shield, AlertCircle, RefreshCw, Power } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { JailTable } from "@/components/jails/JailTable";
 import { JailFilters } from "@/components/jails/JailFilters";
@@ -8,6 +8,17 @@ import { useJails } from "@/hooks/useJails";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function Jails() {
   const {
@@ -21,7 +32,9 @@ export default function Jails() {
     refetch,
     unbanIP,
     toggleJail,
+    restartFail2ban,
     isToggling,
+    isRestarting,
   } = useJails();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -76,11 +89,47 @@ export default function Jails() {
             </p>
           </div>
           {!isLoading && (
-            <RefreshIndicator
-              lastUpdated={lastUpdated}
-              isRefetching={isRefetching}
-              onRefresh={refetch}
-            />
+            <div className="flex items-center gap-3">
+              <RefreshIndicator
+                lastUpdated={lastUpdated}
+                isRefetching={isRefetching}
+                onRefresh={refetch}
+              />
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isRestarting}
+                    className="font-mono"
+                  >
+                    <Power className={`h-4 w-4 mr-2 ${isRestarting ? "animate-spin" : ""}`} />
+                    {isRestarting ? "Restarting..." : "Restart Fail2ban"}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Restart Fail2ban Service</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will restart the fail2ban service. All jails will be temporarily unavailable during the restart process (typically 2-5 seconds).
+                      <br />
+                      <br />
+                      <strong>Are you sure you want to continue?</strong>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => restartFail2ban()}
+                      disabled={isRestarting}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {isRestarting ? "Restarting..." : "Restart Service"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           )}
         </div>
 

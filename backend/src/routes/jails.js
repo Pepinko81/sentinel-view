@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { executeScript } = require('../services/scriptExecutor');
 const { runFail2banAction, verifyJailState, getGlobalFail2banStatus } = require('../services/fail2banControl');
+const { discoverConfiguredJails, getJailRuntimeState } = require('../services/jailDiscovery');
 const { parseMonitorOutput, defaultMonitorOutput } = require('../services/parsers/monitorParser');
 const { parseQuickCheck } = require('../services/parsers/monitorParser');
 const { parseTestFail2ban } = require('../services/parsers/fail2banParser');
@@ -126,26 +127,40 @@ router.get('/', async (req, res, next) => {
     }
     
     // ---------------------------------------------
-    // JAIL STATE MODEL (STRICT, NO HEURISTICS)
+    // JAIL DISCOVERY & STATE MODEL (NEW ARCHITECTURE)
     // ---------------------------------------------
-    // Source of truth for enabled state:
-    // - monitorData.fail2ban.jails comes from `fail2ban-client status`
-    // - If a jail name is present there, command succeeded -> jail exists/enabled
-    // - If a jail name is missing, it "does not exist" for our purposes
+    // Source of truth for jail EXISTENCE:
+    // - discoverConfiguredJails() scans /etc/fail2ban/jail.d/*.conf and jail.local
+    // - This defines ALL POSSIBLE jails (configured)
+    //
+    // Source of truth for jail ENABLED/DISABLED:
+    // - getJailRuntimeState() attempts: sudo fail2ban-client status <jail>
+    // - If succeeds -> enabled = true
+    // - If fails with "does not exist" -> enabled = false
     //
     // Source of truth for banned count:
-    // - monitorData.jails[].bannedCount parsed from:
-    //   - "Currently banned:" (test-fail2ban.sh)
-    //   - "nginx-hidden-files (1 блокирани):" (monitor-security.sh)
+    // - From parsed status output: "Currently banned" and "Total banned"
     //
-    // We NEVER:
-    // - Infer enabled from banned count or IP list
-    // - Overwrite bannedCount with banned IP list length
-    // - Drop jails because bannedCount = 0
+    // CRITICAL:
+    // - Stopped jails MUST remain visible in UI
+    // - Jail NEVER disappears from API response
     // ---------------------------------------------
     
-    const configuredJails = monitorData.fail2ban?.jails || [];
-    const parsedJails = monitorData.jails || [];
+    // Discover ALL configured jails from config files (source of truth)
+    let configuredJailsList = [];
+    let discoveryErrors = [];
+    try {
+      const discoveryResult = await discoverConfiguredJails();
+      configuredJailsList = discoveryResult.jails || [];
+      if (discoveryResult.errors) {
+        discoveryErrors = discoveryResult.errors;
+      }
+    } catch (err) {
+      console.error('Jail discovery failed:', err.message);
+      discoveryErrors.push(`Jail discovery failed: ${err.message}`);
+      // Fallback to runtime list if discovery fails
+      configuredJailsList = monitorData.fail2ban?.jails || [];
+    }
     
     // Optional: refine bannedCount/bannedIPs using test-fail2ban.sh (real fail2ban-client status <jail>)
     let testData = {};
@@ -154,41 +169,56 @@ router.get('/', async (req, res, next) => {
       testData = parseTestFail2ban(testStdout || '');
     } catch (err) {
       console.error('Failed to execute or parse test-fail2ban.sh:', err.message);
-      // Do not crash jails listing – we can still use monitorData
+      // Do not crash jails listing – we can still use runtime state checks
     }
     
-    // Build jails array strictly from configured (runtime) jails
-    const jails = configuredJails.map(jailName => {
-      const jailData = parsedJails.find(j => j.name === jailName) || {};
+    // Build jails array from ALL configured jails (not just runtime active ones)
+    // For each configured jail, check runtime state
+    const jails = await Promise.all(configuredJailsList.map(async (jailName) => {
+      // Get runtime state for this jail
+      let runtimeState;
+      try {
+        runtimeState = await getJailRuntimeState(jailName);
+      } catch (err) {
+        // If runtime check fails, assume disabled
+        runtimeState = { enabled: false };
+      }
+      
+      const isEnabled = runtimeState.enabled === true;
+      const parsedJailStatus = runtimeState.status || {};
+      
+      // Get banned info from parsed status or test data
       const testStatus = testData[jailName] || {};
       
       // currently_banned: ONLY from "Currently banned" (runtime active bans)
-      // This is the ONLY value used in UI tables
-      const currentlyBanned = typeof testStatus.currentlyBanned === 'number'
-        ? testStatus.currentlyBanned
-        : (typeof testStatus.bannedCount === 'number'
-            ? testStatus.bannedCount
-            : (typeof jailData.bannedCount === 'number' ? jailData.bannedCount : 0));
+      const currentlyBanned = isEnabled && parsedJailStatus.currentlyBanned !== undefined
+        ? parsedJailStatus.currentlyBanned
+        : (typeof testStatus.currentlyBanned === 'number'
+            ? testStatus.currentlyBanned
+            : (typeof testStatus.bannedCount === 'number'
+                ? testStatus.bannedCount
+                : (isEnabled && parsedJailStatus.bannedCount !== undefined
+                    ? parsedJailStatus.bannedCount
+                    : 0)));
       
       // total_banned: from "Total banned" (historical, optional, informational)
-      const totalBanned = typeof testStatus.totalBanned === 'number'
-        ? testStatus.totalBanned
-        : (typeof jailData.totalBanned === 'number' ? jailData.totalBanned : undefined);
+      const totalBanned = parsedJailStatus.totalBanned !== undefined
+        ? parsedJailStatus.totalBanned
+        : (typeof testStatus.totalBanned === 'number'
+            ? testStatus.totalBanned
+            : undefined);
       
-      // banned_ips: from Banned IP list (whitespace-separated) in fail2ban-client status <jail>,
-      // or from monitorData if not available
-      const bannedIPsRaw = Array.isArray(testStatus.bannedIPs)
-        ? testStatus.bannedIPs
-        : (Array.isArray(jailData.bannedIPs) ? jailData.bannedIPs : []);
-      
-      // enabled:
-      // - true if jail appears in configuredJails (fail2ban reports it)
-      // - false only for non-existent jails (handled with 404 in /api/jails/:name)
-      const isEnabled = true;
+      // banned_ips: from parsed status or test data
+      const bannedIPsRaw = isEnabled && Array.isArray(parsedJailStatus.bannedIPs)
+        ? parsedJailStatus.bannedIPs
+        : (Array.isArray(testStatus.bannedIPs)
+            ? testStatus.bannedIPs
+            : []);
       
       return {
         name: jailName,
         enabled: isEnabled,
+        configured: true, // All jails from discovery are configured
         // API contract fields - explicit semantics
         currently_banned: currentlyBanned, // Runtime active bans (used in UI)
         banned_ips: bannedIPsRaw, // Active banned IP addresses
@@ -206,7 +236,7 @@ router.get('/', async (req, res, next) => {
         maxRetry: null,
         banTime: null,
       };
-    });
+    }));
     
     // Determine server status
     let serverStatus = 'online';
@@ -217,12 +247,18 @@ router.get('/', async (req, res, next) => {
       serverStatus = fail2banErrors.length > 0 ? 'offline' : 'partial';
     }
     
+    // Combine errors from discovery and monitor
+    const allErrors = [
+      ...(discoveryErrors || []),
+      ...(monitorData.errors || []),
+    ];
+    
     const rawResponse = {
       jails,
       lastUpdated: new Date().toISOString(),
       serverStatus,
-      errors: monitorData.errors || [],
-      partial: monitorData.partial || false,
+      errors: allErrors.length > 0 ? allErrors : undefined,
+      partial: monitorData.partial || discoveryErrors.length > 0 || false,
     };
     
     // Serialize to ensure exact frontend schema match
@@ -309,27 +345,47 @@ router.get('/:name', async (req, res, next) => {
       return res.status(503).json(errorResponse);
     }
     
-    // Check if jail exists
-    const configuredJails = monitorData.fail2ban?.jails || [];
-    if (!configuredJails.includes(jailName)) {
+    // Check if jail exists in CONFIGURATION (source of truth)
+    let configuredJailsList = [];
+    try {
+      const discoveryResult = await discoverConfiguredJails();
+      configuredJailsList = discoveryResult.jails || [];
+    } catch (err) {
+      // Fallback to runtime list if discovery fails
+      configuredJailsList = monitorData.fail2ban?.jails || [];
+    }
+    
+    if (!configuredJailsList.includes(jailName)) {
       return res.status(404).json({
-        error: `Jail "${jailName}" not found`,
+        error: `Jail "${jailName}" is not configured in fail2ban`,
         code: 'JAIL_NOT_FOUND',
         errors: monitorData.errors || [],
       });
     }
     
-    // Find jail in monitor data
+    // Get runtime state for this jail
+    let runtimeState;
+    try {
+      runtimeState = await getJailRuntimeState(jailName);
+    } catch (err) {
+      // If runtime check fails, assume disabled
+      runtimeState = { enabled: false };
+    }
+    
+    const isEnabled = runtimeState.enabled === true;
+    const parsedJailStatus = runtimeState.status || {};
+    
+    // Find jail in monitor data for additional info
     const jailData = (monitorData.jails || []).find(j => j.name === jailName);
     
     const category = inferCategory(jailName);
-    const bannedCount = jailData ? (jailData.bannedCount || 0) : 0;
-    const bannedIPs = jailData ? (jailData.bannedIPs || []) : [];
-    
-    // ENABLED STATE (STRICT):
-    // - Jail is enabled if it appears in fail2ban jail list (configuredJails)
-    // - Banned count / IP list do NOT control enabled/disabled
-    const isEnabled = (monitorData.fail2ban?.jails || []).includes(jailName);
+    // Use parsed status first, then fallback to monitor data
+    const bannedCount = parsedJailStatus.currentlyBanned !== undefined
+      ? parsedJailStatus.currentlyBanned
+      : (jailData ? (jailData.bannedCount || 0) : 0);
+    const bannedIPs = Array.isArray(parsedJailStatus.bannedIPs) && parsedJailStatus.bannedIPs.length > 0
+      ? parsedJailStatus.bannedIPs
+      : (jailData ? (jailData.bannedIPs || []) : []);
     
     const severity = inferSeverity(jailName, bannedCount || bannedIPs.length);
     
@@ -342,17 +398,19 @@ router.get('/:name', async (req, res, next) => {
     const rawResponse = {
       name: jailName,
       enabled: isEnabled,
+      configured: true, // All jails from discovery are configured
       // API contract fields
-      banned_count: bannedCount,
+      currently_banned: bannedCount,
       banned_ips: bannedIPs,
+      banned_count: bannedCount, // Backward compatibility
       // Frontend-friendly enriched structure
       bannedIPs: bannedIPsFormatted,
       category,
       severity,
       filter: jailName,
-      maxRetry: null,
-      banTime: null,
-      findTime: null,
+      maxRetry: parsedJailStatus.maxRetry || null,
+      banTime: parsedJailStatus.banTime || null,
+      findTime: parsedJailStatus.findTime || null,
       last_activity: bannedIPsFormatted.length > 0 ? bannedIPsFormatted[0].bannedAt : null,
       errors: monitorData.errors || [],
       partial: monitorData.partial || false,
@@ -384,31 +442,23 @@ router.post('/:name/enable', async (req, res, next) => {
       });
     }
 
-    // Get global fail2ban status via sudo /usr/bin/fail2ban-client status
-    let globalStatus;
+    // Validate jail exists in CONFIGURATION (not runtime)
+    // This allows disabling jails even if they're already stopped
+    let configuredJailsList = [];
     try {
-      globalStatus = await getGlobalFail2banStatus();
+      const discoveryResult = await discoverConfiguredJails();
+      configuredJailsList = discoveryResult.jails || [];
     } catch (err) {
       return res.status(503).json({
         success: false,
-        error: `Fail2ban status error: ${err.message}`,
+        error: `Failed to discover configured jails: ${err.message}`,
       });
     }
 
-    const configuredJails = globalStatus.jails || [];
-
-    // Fail2ban not running or no jails
-    if (!Array.isArray(configuredJails) || configuredJails.length === 0) {
-      return res.status(503).json({
-        success: false,
-        error: 'Fail2ban is not running or no jails are configured',
-      });
-    }
-
-    if (!configuredJails.includes(jailName)) {
+    if (!configuredJailsList.includes(jailName)) {
       return res.status(404).json({
         success: false,
-        error: `Jail \"${jailName}\" does not exist in current fail2ban status`,
+        error: `Jail "${jailName}" is not configured in fail2ban`,
       });
     }
 
@@ -466,31 +516,23 @@ router.post('/:name/disable', async (req, res, next) => {
       });
     }
 
-    // Get global fail2ban status via sudo /usr/bin/fail2ban-client status
-    let globalStatus;
+    // Validate jail exists in CONFIGURATION (not runtime)
+    // This allows disabling jails even if they're already stopped
+    let configuredJailsList = [];
     try {
-      globalStatus = await getGlobalFail2banStatus();
+      const discoveryResult = await discoverConfiguredJails();
+      configuredJailsList = discoveryResult.jails || [];
     } catch (err) {
       return res.status(503).json({
         success: false,
-        error: `Fail2ban status error: ${err.message}`,
+        error: `Failed to discover configured jails: ${err.message}`,
       });
     }
 
-    const configuredJails = globalStatus.jails || [];
-
-    // Fail2ban not running or no jails
-    if (!Array.isArray(configuredJails) || configuredJails.length === 0) {
-      return res.status(503).json({
-        success: false,
-        error: 'Fail2ban is not running or no jails are configured',
-      });
-    }
-
-    if (!configuredJails.includes(jailName)) {
+    if (!configuredJailsList.includes(jailName)) {
       return res.status(404).json({
         success: false,
-        error: `Jail \"${jailName}\" does not exist in current fail2ban status`,
+        error: `Jail "${jailName}" is not configured in fail2ban`,
       });
     }
 
