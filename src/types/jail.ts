@@ -7,7 +7,10 @@ export interface BannedIP {
 export interface Jail {
   name: string;
   enabled: boolean;
+  configured?: boolean; // Always true for jails from API
+  status?: 'ENABLED' | 'DISABLED'; // Explicit status field
   bannedIPs: BannedIP[];
+  banned_ips?: string[]; // Raw IP addresses from fail2ban
   // Explicit semantics for ban counts
   currently_banned?: number; // Runtime active bans (source of truth for UI)
   total_banned?: number; // Historical total (optional, informational)

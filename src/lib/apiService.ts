@@ -155,27 +155,23 @@ export const unbanIP = async (jailName: string, ip: string): Promise<boolean> =>
 };
 
 /**
- * Toggle jail enabled/disabled
+ * Toggle jail enabled/disabled (idempotent)
+ * Uses the new toggle endpoint which handles NOK responses correctly
  */
 export const toggleJail = async (jailName: string): Promise<boolean> => {
   try {
-    // 1) Вземаме текущото състояние на jail-а
-    const jail = await fetchJail(jailName);
-
-    // 2) Избираме правилния endpoint според текущия enabled флаг
-    const targetEnabled = !jail.enabled;
-    const actionPath = targetEnabled ? 'enable' : 'disable';
-
     type ToggleResponse = {
       success: boolean;
       jail?: string;
       enabled?: boolean;
+      status?: 'ENABLED' | 'DISABLED';
       message?: string;
       error?: string;
+      nokIgnored?: boolean;
     };
 
     const response = await apiClient.post<ToggleResponse>(
-      `/api/jails/${encodeURIComponent(jailName)}/${actionPath}`
+      `/api/jails/${encodeURIComponent(jailName)}/toggle`
     );
 
     if (!response.success) {
@@ -183,8 +179,8 @@ export const toggleJail = async (jailName: string): Promise<boolean> => {
       throw new Error(response.error || response.message || 'Failed to toggle jail');
     }
 
-    // Връщаме новия enabled статус (true ако вече е включен, false ако е изключен)
-    return response.enabled ?? targetEnabled;
+    // Return the new enabled status
+    return response.enabled ?? false;
   } catch (error) {
     console.error('Toggle jail failed:', error);
     throw error;

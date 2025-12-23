@@ -108,9 +108,10 @@ async function getGlobalFail2banStatus() {
  *
  * @param {'start'|'stop'|'status'} action
  * @param {string} jailName
- * @returns {Promise<{ stdout: string, stderr: string }>}
+ * @param {boolean} ignoreNOK - If true, NOK responses are not treated as errors (for idempotent operations)
+ * @returns {Promise<{ stdout: string, stderr: string, nok: boolean }>}
  */
-async function runFail2banAction(action, jailName) {
+async function runFail2banAction(action, jailName, ignoreNOK = false) {
   if (!ALLOWED_ACTIONS.has(action)) {
     throw new Error(`Invalid fail2ban action: ${action}`);
   }
@@ -143,6 +144,44 @@ async function runFail2banAction(action, jailName) {
       encoding: 'utf8',
     });
 
+    const errorCheck = detectFail2banError(stdout || '', stderr || '');
+    const isNOK = errorCheck.isError && (
+      (errorCheck.message || '').toLowerCase().includes('nok') ||
+      (stdout || '').toLowerCase().includes('error   nok') ||
+      (stdout || '').toLowerCase().includes('error nok')
+    );
+
+    // If ignoreNOK is true and this is a NOK response, don't treat it as error
+    if (isNOK && ignoreNOK) {
+      appendAuditLog({
+        jail: jailName,
+        action,
+        step: 'after_exec',
+        command,
+        args,
+        result: 'nok_ignored',
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+      });
+      return { stdout, stderr, nok: true };
+    }
+
+    if (errorCheck.isError && !isNOK) {
+      // Real error, not just NOK
+      const err = new Error(errorCheck.message || 'fail2ban error');
+      err.errorType = errorCheck.errorType;
+      appendAuditLog({
+        jail: jailName,
+        action,
+        step: 'after_exec',
+        command,
+        args,
+        result: 'error',
+        error: err.message,
+      });
+      throw err;
+    }
+
     appendAuditLog({
       jail: jailName,
       action,
@@ -154,15 +193,23 @@ async function runFail2banAction(action, jailName) {
       stderr: stderr.trim(),
     });
 
-    const errorCheck = detectFail2banError(stdout || '', stderr || '');
-    if (errorCheck.isError) {
-      const err = new Error(errorCheck.message || 'fail2ban error');
-      err.errorType = errorCheck.errorType;
-      throw err;
+    return { stdout, stderr, nok: false };
+  } catch (err) {
+    // Check if it's a NOK in the error message
+    const isNOK = (err.message || '').toLowerCase().includes('nok');
+    if (isNOK && ignoreNOK) {
+      appendAuditLog({
+        jail: jailName,
+        action,
+        step: 'after_exec',
+        command,
+        args,
+        result: 'nok_ignored',
+        error: err.message,
+      });
+      return { stdout: '', stderr: err.message, nok: true };
     }
 
-    return { stdout, stderr };
-  } catch (err) {
     appendAuditLog({
       jail: jailName,
       action,

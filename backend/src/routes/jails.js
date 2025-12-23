@@ -174,56 +174,59 @@ router.get('/', async (req, res, next) => {
       // Do not crash jails listing – we can still use runtime state checks
     }
     
-    // Build jails array from ALL configured jails (not just runtime active ones)
-    // For each configured jail, check runtime state
+    // Get active jails from fail2ban-client status (runtime state)
+    let activeJailsList = [];
+    try {
+      const globalStatus = await getGlobalFail2banStatus();
+      activeJailsList = globalStatus.jails || [];
+      console.log(`[JAILS API] Found ${activeJailsList.length} active jails: ${activeJailsList.join(', ')}`);
+    } catch (err) {
+      console.warn(`[JAILS API] Failed to get active jails list: ${err.message}`);
+      // Continue with configured jails only
+    }
+    
+    // Build jails array from ALL configured jails (source of truth)
+    // For each configured jail, check runtime state and get REAL banned count
     const jails = await Promise.all(configuredJailsList.map(async (jailName) => {
-      // Get runtime state for this jail
-      let runtimeState;
-      try {
-        runtimeState = await getJailRuntimeState(jailName);
-      } catch (err) {
-        // If runtime check fails, assume disabled
-        runtimeState = { enabled: false };
+      // Determine status: ENABLED if in active list, DISABLED otherwise
+      const isEnabled = activeJailsList.includes(jailName);
+      
+      // Get REAL banned count and IPs via fail2ban-client status <jail>
+      // This is the ONLY reliable source for banned IPs
+      let currentlyBanned = 0;
+      let bannedIPsRaw = [];
+      let totalBanned = undefined;
+      
+      if (isEnabled) {
+        // Jail is active - get real status
+        try {
+          const runtimeState = await getJailRuntimeState(jailName);
+          if (runtimeState.enabled && runtimeState.status) {
+            const parsedStatus = runtimeState.status;
+            currentlyBanned = typeof parsedStatus.currentlyBanned === 'number' 
+              ? parsedStatus.currentlyBanned 
+              : (typeof parsedStatus.bannedCount === 'number' ? parsedStatus.bannedCount : 0);
+            bannedIPsRaw = Array.isArray(parsedStatus.bannedIPs) ? parsedStatus.bannedIPs : [];
+            totalBanned = parsedStatus.totalBanned;
+          }
+        } catch (err) {
+          // If status check fails for active jail, log but don't fail
+          console.warn(`[JAILS API] Failed to get status for active jail ${jailName}: ${err.message}`);
+        }
+      } else {
+        // Jail is disabled - banned count is always 0
+        currentlyBanned = 0;
+        bannedIPsRaw = [];
       }
-      
-      const isEnabled = runtimeState.enabled === true;
-      const parsedJailStatus = runtimeState.status || {};
-      
-      // Get banned info from parsed status or test data
-      const testStatus = testData[jailName] || {};
-      
-      // currently_banned: ONLY from "Currently banned" (runtime active bans)
-      const currentlyBanned = isEnabled && parsedJailStatus.currentlyBanned !== undefined
-        ? parsedJailStatus.currentlyBanned
-        : (typeof testStatus.currentlyBanned === 'number'
-            ? testStatus.currentlyBanned
-            : (typeof testStatus.bannedCount === 'number'
-                ? testStatus.bannedCount
-                : (isEnabled && parsedJailStatus.bannedCount !== undefined
-                    ? parsedJailStatus.bannedCount
-                    : 0)));
-      
-      // total_banned: from "Total banned" (historical, optional, informational)
-      const totalBanned = parsedJailStatus.totalBanned !== undefined
-        ? parsedJailStatus.totalBanned
-        : (typeof testStatus.totalBanned === 'number'
-            ? testStatus.totalBanned
-            : undefined);
-      
-      // banned_ips: from parsed status or test data
-      const bannedIPsRaw = isEnabled && Array.isArray(parsedJailStatus.bannedIPs)
-        ? parsedJailStatus.bannedIPs
-        : (Array.isArray(testStatus.bannedIPs)
-            ? testStatus.bannedIPs
-            : []);
       
       return {
         name: jailName,
         enabled: isEnabled,
         configured: true, // All jails from discovery are configured
+        status: isEnabled ? 'ENABLED' : 'DISABLED', // Explicit status field
         // API contract fields - explicit semantics
-        currently_banned: currentlyBanned, // Runtime active bans (used in UI)
-        banned_ips: bannedIPsRaw, // Active banned IP addresses
+        currently_banned: currentlyBanned, // REAL value from fail2ban-client status
+        banned_ips: bannedIPsRaw, // REAL IPs from fail2ban-client status
         total_banned: totalBanned, // Historical total (optional, informational)
         // Backward compatibility aliases
         banned_count: currentlyBanned, // Deprecated: use currently_banned
@@ -558,11 +561,30 @@ router.post('/:name/enable', async (req, res, next) => {
       console.warn(`[JAIL ENABLE] Could not validate jail configuration: ${configErr.message}`);
     }
 
-    // Execute start command
+    // Check if jail is already enabled before attempting to start
+    let alreadyEnabled = false;
+    try {
+      const globalStatus = await getGlobalFail2banStatus();
+      alreadyEnabled = (globalStatus.jails || []).includes(jailName);
+      if (alreadyEnabled) {
+        console.log(`[JAIL ENABLE] Jail ${jailName} is already enabled`);
+        return res.json({
+          success: true,
+          jail: jailName,
+          enabled: true,
+          status: 'ENABLED',
+          message: 'Jail is already enabled',
+        });
+      }
+    } catch (statusErr) {
+      console.warn(`[JAIL ENABLE] Could not check current state: ${statusErr.message}`);
+    }
+
+    // Execute start command with ignoreNOK=true (idempotent)
     console.log(`[JAIL ENABLE] Attempting to start jail: ${jailName}`);
     try {
-      await runFail2banAction('start', jailName);
-      console.log(`[JAIL ENABLE] ✅ Successfully started jail: ${jailName}`);
+      const actionResult = await runFail2banAction('start', jailName, true); // ignoreNOK = true
+      console.log(`[JAIL ENABLE] Start command executed, NOK: ${actionResult.nok}`);
     } catch (err) {
       console.error(`[JAIL ENABLE] ❌ Failed to start jail ${jailName}:`, err);
       
@@ -631,15 +653,41 @@ router.post('/:name/enable', async (req, res, next) => {
       });
     }
 
-    // Verify final state
+    // Verify final state - wait a moment for state to settle
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     try {
-      const state = await verifyJailState(jailName);
-      const enabled = Boolean(state.enabled);
+      const globalStatus = await getGlobalFail2banStatus();
+      const enabled = (globalStatus.jails || []).includes(jailName);
 
       if (!enabled) {
+        // If we got NOK, jail might already be enabled (idempotent case)
+        if (actionResult.nok) {
+          // Double-check with individual status
+          try {
+            const runtimeState = await getJailRuntimeState(jailName);
+            if (runtimeState.enabled) {
+              return res.json({
+                success: true,
+                jail: jailName,
+                enabled: true,
+                status: 'ENABLED',
+                message: 'Jail enabled (was already enabled)',
+                nokIgnored: true,
+              });
+            }
+          } catch (checkErr) {
+            // Continue to error
+          }
+        }
+
         return res.status(500).json({
           success: false,
           error: 'Verification failed: jail is not enabled after start command',
+          details: {
+            jailName,
+            nokReceived: actionResult.nok,
+          },
         });
       }
 
@@ -647,7 +695,9 @@ router.post('/:name/enable', async (req, res, next) => {
         success: true,
         jail: jailName,
         enabled: true,
+        status: 'ENABLED',
         message: 'Jail enabled',
+        nokIgnored: actionResult.nok,
       });
     } catch (err) {
       return res.status(500).json({
@@ -695,20 +745,50 @@ router.post('/:name/disable', async (req, res, next) => {
       });
     }
 
-    // Issue stop command
+    // Check if jail is already disabled before attempting to stop
+    let alreadyDisabled = false;
     try {
-      await runFail2banAction('stop', jailName);
-    } catch (err) {
-      return res.status(500).json({
-        success: false,
-        error: `Failed to stop jail: ${err.message}`,
-      });
+      const globalStatus = await getGlobalFail2banStatus();
+      alreadyDisabled = !(globalStatus.jails || []).includes(jailName);
+      if (alreadyDisabled) {
+        console.log(`[JAIL DISABLE] Jail ${jailName} is already disabled`);
+        return res.json({
+          success: true,
+          jail: jailName,
+          enabled: false,
+          status: 'DISABLED',
+          message: 'Jail is already disabled',
+        });
+      }
+    } catch (statusErr) {
+      console.warn(`[JAIL DISABLE] Could not check current state: ${statusErr.message}`);
     }
+
+    // Issue stop command with ignoreNOK=true (idempotent)
+    try {
+      const actionResult = await runFail2banAction('stop', jailName, true); // ignoreNOK = true
+      console.log(`[JAIL DISABLE] Stop command executed, NOK: ${actionResult.nok}`);
+    } catch (err) {
+      // Check if it's a NOK error (jail already stopped)
+      const isNOK = (err.message || '').toLowerCase().includes('nok');
+      if (isNOK) {
+        console.log(`[JAIL DISABLE] Received NOK on stop - jail may already be disabled`);
+        // Continue to verification
+      } else {
+        return res.status(500).json({
+          success: false,
+          error: `Failed to stop jail: ${err.message}`,
+        });
+      }
+    }
+
+    // Verify final state - wait a moment for state to settle
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     // Verify final state (disabled or missing)
     try {
-      const state = await verifyJailState(jailName);
-      const enabled = Boolean(state.enabled);
+      const globalStatus = await getGlobalFail2banStatus();
+      const enabled = (globalStatus.jails || []).includes(jailName);
 
       if (enabled) {
         return res.status(500).json({
@@ -721,17 +801,189 @@ router.post('/:name/disable', async (req, res, next) => {
         success: true,
         jail: jailName,
         enabled: false,
+        status: 'DISABLED',
         message: 'Jail disabled',
       });
     } catch (err) {
-      // If verifyJailState treated the jail as missing/disabled, it already returned.
-      // Any error reaching here is a real verification error.
-      return res.status(500).json({
-        success: false,
-        error: `Verification error: ${err.message}`,
+      // If we can't verify via global status, assume disabled (jail disappeared from list)
+      console.warn(`[JAIL DISABLE] Could not verify via global status, assuming disabled: ${err.message}`);
+      return res.json({
+        success: true,
+        jail: jailName,
+        enabled: false,
+        status: 'DISABLED',
+        message: 'Jail disabled',
       });
     }
   } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/jails/:name/toggle
+ * Idempotent toggle endpoint - safely enables or disables a jail
+ * Handles NOK responses correctly (NOK is not always an error)
+ */
+router.post('/:name/toggle', async (req, res, next) => {
+  const jailName = req.params.name;
+
+  console.log(`[JAIL TOGGLE] Starting toggle for jail: ${jailName}`);
+
+  try {
+    if (!isValidJailName(jailName)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid jail name',
+      });
+    }
+
+    // Validate jail exists in CONFIGURATION
+    let configuredJailsList = [];
+    try {
+      const discoveryResult = await discoverConfiguredJails();
+      configuredJailsList = discoveryResult.jails || [];
+    } catch (err) {
+      return res.status(503).json({
+        success: false,
+        error: `Failed to discover configured jails: ${err.message}`,
+      });
+    }
+
+    if (!configuredJailsList.includes(jailName)) {
+      return res.status(404).json({
+        success: false,
+        error: `Jail "${jailName}" is not configured in fail2ban`,
+      });
+    }
+
+    // Get current state by checking if jail is in active list
+    let currentState;
+    try {
+      const globalStatus = await getGlobalFail2banStatus();
+      const activeJails = globalStatus.jails || [];
+      currentState = activeJails.includes(jailName) ? 'ENABLED' : 'DISABLED';
+      console.log(`[JAIL TOGGLE] Current state for ${jailName}: ${currentState}`);
+    } catch (err) {
+      // If we can't get global status, try individual status
+      try {
+        const runtimeState = await getJailRuntimeState(jailName);
+        currentState = runtimeState.enabled ? 'ENABLED' : 'DISABLED';
+      } catch (stateErr) {
+        // Assume disabled if we can't determine
+        currentState = 'DISABLED';
+        console.warn(`[JAIL TOGGLE] Could not determine current state, assuming DISABLED: ${stateErr.message}`);
+      }
+    }
+
+    // Determine target state
+    const targetState = currentState === 'ENABLED' ? 'DISABLED' : 'ENABLED';
+    const action = targetState === 'ENABLED' ? 'start' : 'stop';
+
+    console.log(`[JAIL TOGGLE] Target state: ${targetState}, Action: ${action}`);
+
+    // Ensure filter file exists before attempting to start
+    if (action === 'start') {
+      try {
+        const filterCheck = await ensureFilterExists(jailName);
+        if (!filterCheck.exists && !filterCheck.created) {
+          return res.status(500).json({
+            success: false,
+            error: `Filter file missing: ${filterCheck.filterName || 'unknown'}.conf`,
+            details: {
+              filterName: filterCheck.filterName,
+              message: filterCheck.message,
+            },
+          });
+        }
+      } catch (filterErr) {
+        console.warn(`[JAIL TOGGLE] Filter check failed: ${filterErr.message}`);
+        // Continue anyway - maybe filter exists but check failed
+      }
+    }
+
+    // Execute action with ignoreNOK=true for idempotent behavior
+    // NOK is OK if jail is already in desired state
+    let actionResult;
+    try {
+      actionResult = await runFail2banAction(action, jailName, true); // ignoreNOK = true
+      console.log(`[JAIL TOGGLE] Action ${action} executed, NOK: ${actionResult.nok}`);
+    } catch (err) {
+      // Only fail if it's not a NOK error
+      const isNOK = (err.message || '').toLowerCase().includes('nok');
+      if (isNOK) {
+        console.log(`[JAIL TOGGLE] Received NOK for ${action}, checking if jail is in desired state`);
+        actionResult = { stdout: '', stderr: err.message, nok: true };
+      } else {
+        throw err;
+      }
+    }
+
+    // Verify final state - wait a moment for state to settle
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    let finalState;
+    let verificationFailed = false;
+    try {
+      const globalStatus = await getGlobalFail2banStatus();
+      const activeJails = globalStatus.jails || [];
+      finalState = activeJails.includes(jailName) ? 'ENABLED' : 'DISABLED';
+      
+      // Check if we achieved the target state
+      if (finalState !== targetState) {
+        // If we got NOK and jail is already in target state, that's OK
+        if (actionResult.nok && finalState === currentState) {
+          console.log(`[JAIL TOGGLE] NOK received but jail already in target state - success`);
+        } else {
+          verificationFailed = true;
+          console.warn(`[JAIL TOGGLE] Verification failed: expected ${targetState}, got ${finalState}`);
+        }
+      } else {
+        console.log(`[JAIL TOGGLE] ✅ Successfully ${action === 'start' ? 'enabled' : 'disabled'} jail: ${jailName}`);
+      }
+    } catch (verifyErr) {
+      // If verification fails, check individual status
+      try {
+        const runtimeState = await getJailRuntimeState(jailName);
+        finalState = runtimeState.enabled ? 'ENABLED' : 'DISABLED';
+        if (finalState !== targetState && !(actionResult.nok && finalState === currentState)) {
+          verificationFailed = true;
+        }
+      } catch (stateErr) {
+        // If we can't verify, but got NOK and action was stop, assume success
+        if (action === 'stop' && actionResult.nok) {
+          finalState = 'DISABLED';
+          console.log(`[JAIL TOGGLE] Cannot verify but got NOK on stop - assuming disabled`);
+        } else {
+          verificationFailed = true;
+        }
+      }
+    }
+
+    if (verificationFailed) {
+      return res.status(500).json({
+        success: false,
+        error: `Failed to ${action} jail. Current state: ${finalState || 'unknown'}, Expected: ${targetState}`,
+        details: {
+          jailName,
+          currentState: finalState || 'unknown',
+          targetState,
+          action,
+          nokReceived: actionResult.nok,
+        },
+      });
+    }
+
+    return res.json({
+      success: true,
+      jail: jailName,
+      enabled: finalState === 'ENABLED',
+      status: finalState,
+      message: `Jail ${finalState === 'ENABLED' ? 'enabled' : 'disabled'} successfully`,
+      nokIgnored: actionResult.nok,
+    });
+  } catch (err) {
+    console.error(`[JAIL TOGGLE] ❌ Error toggling jail ${jailName}:`, err);
     next(err);
   }
 });
