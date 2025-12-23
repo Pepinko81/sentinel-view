@@ -319,9 +319,24 @@ async function createFilterFile(filterName) {
  * @returns {Promise<{ exists: boolean, created: boolean, filterName: string, message: string }>}
  */
 async function ensureFilterExists(jailName) {
-  const filterName = await getFilterName(jailName);
+  console.log(`[FILTER MANAGER] ensureFilterExists called for jail: ${jailName}`);
+  
+  let filterName;
+  try {
+    filterName = await getFilterName(jailName);
+    console.log(`[FILTER MANAGER] Determined filter name: ${filterName || 'null'} for jail: ${jailName}`);
+  } catch (err) {
+    console.error(`[FILTER MANAGER] Failed to get filter name for ${jailName}:`, err);
+    return {
+      exists: false,
+      created: false,
+      filterName: null,
+      message: `Could not determine filter name for jail: ${jailName}. Error: ${err.message}`,
+    };
+  }
   
   if (!filterName) {
+    console.warn(`[FILTER MANAGER] No filter name found for jail: ${jailName}`);
     return {
       exists: false,
       created: false,
@@ -330,7 +345,11 @@ async function ensureFilterExists(jailName) {
     };
   }
   
+  const filterPath = path.join(FAIL2BAN_FILTER_DIR, `${filterName}.conf`);
+  console.log(`[FILTER MANAGER] Checking if filter file exists: ${filterPath}`);
+  
   if (filterFileExists(filterName)) {
+    console.log(`[FILTER MANAGER] ✅ Filter file already exists: ${filterPath}`);
     return {
       exists: true,
       created: false,
@@ -339,8 +358,15 @@ async function ensureFilterExists(jailName) {
     };
   }
   
+  console.log(`[FILTER MANAGER] Filter file missing, attempting to create: ${filterPath}`);
+  
   // Try to create filter file
   const result = await createFilterFile(filterName);
+  
+  console.log(`[FILTER MANAGER] Filter creation result:`, {
+    created: result.created,
+    message: result.message,
+  });
   
   return {
     exists: result.created,

@@ -435,6 +435,8 @@ router.get('/:name', async (req, res, next) => {
 router.post('/:name/enable', async (req, res, next) => {
   const jailName = req.params.name;
 
+  console.log(`[JAIL ENABLE] Starting enable process for jail: ${jailName}`);
+
   try {
     if (!isValidJailName(jailName)) {
       return res.status(400).json({
@@ -449,7 +451,9 @@ router.post('/:name/enable', async (req, res, next) => {
     try {
       const discoveryResult = await discoverConfiguredJails();
       configuredJailsList = discoveryResult.jails || [];
+      console.log(`[JAIL ENABLE] Discovered ${configuredJailsList.length} configured jails`);
     } catch (err) {
+      console.error(`[JAIL ENABLE] Failed to discover jails:`, err);
       return res.status(503).json({
         success: false,
         error: `Failed to discover configured jails: ${err.message}`,
@@ -457,11 +461,14 @@ router.post('/:name/enable', async (req, res, next) => {
     }
 
     if (!configuredJailsList.includes(jailName)) {
+      console.warn(`[JAIL ENABLE] Jail ${jailName} not found in configured jails list`);
       return res.status(404).json({
         success: false,
         error: `Jail "${jailName}" is not configured in fail2ban`,
       });
     }
+
+    console.log(`[JAIL ENABLE] Jail ${jailName} found in configuration, checking filter file...`);
 
     // Ensure filter file exists before attempting to start
     // This prevents "jail does not exist" errors when filter is missing
