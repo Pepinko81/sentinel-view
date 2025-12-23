@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
 const { executeScript } = require('../services/scriptExecutor');
 const { runFail2banAction, verifyJailState, getGlobalFail2banStatus } = require('../services/fail2banControl');
 const { discoverConfiguredJails, getJailRuntimeState } = require('../services/jailDiscovery');
-const { ensureFilterExists, getFilterName, FILTER_TEMPLATES } = require('../services/filterManager');
+const { ensureFilterExists, getFilterName, FILTER_TEMPLATES, getJailConfig } = require('../services/filterManager');
 const { parseMonitorOutput, defaultMonitorOutput } = require('../services/parsers/monitorParser');
 const { parseQuickCheck } = require('../services/parsers/monitorParser');
 const { parseTestFail2ban } = require('../services/parsers/fail2banParser');
@@ -532,20 +533,75 @@ router.post('/:name/enable', async (req, res, next) => {
       });
     }
 
+    // Validate jail configuration before attempting to start
+    // Check if logpath exists (if specified)
+    try {
+      const jailConfig = await getJailConfig(jailName);
+      
+      if (jailConfig && jailConfig.config) {
+        const logpath = jailConfig.config.logpath;
+        if (logpath) {
+          // logpath can be a single path or multiple paths separated by space
+          const logPaths = logpath.split(/\s+/).filter(p => p.trim());
+          
+          for (const logPath of logPaths) {
+            if (!fs.existsSync(logPath)) {
+              console.warn(`[JAIL ENABLE] ⚠️ Log path does not exist: ${logPath}`);
+              // Don't fail here - fail2ban will handle this, but log it
+            } else {
+              console.log(`[JAIL ENABLE] ✅ Log path exists: ${logPath}`);
+            }
+          }
+        }
+      }
+    } catch (configErr) {
+      console.warn(`[JAIL ENABLE] Could not validate jail configuration: ${configErr.message}`);
+    }
+
     // Execute start command
+    console.log(`[JAIL ENABLE] Attempting to start jail: ${jailName}`);
     try {
       await runFail2banAction('start', jailName);
+      console.log(`[JAIL ENABLE] ✅ Successfully started jail: ${jailName}`);
     } catch (err) {
+      console.error(`[JAIL ENABLE] ❌ Failed to start jail ${jailName}:`, err);
+      
       // Provide more helpful error message if jail doesn't exist
       const errorMessage = err.message || '';
       if (errorMessage.includes('does not exist') || errorMessage.includes('NOK')) {
-        // Try to get filter name for better error message
+        // Try to get filter name and jail config for better error message
         let filterName = null;
+        let jailConfig = null;
+        let logpath = null;
+        
         try {
           filterName = await getFilterName(jailName);
-        } catch (filterErr) {
-          // Ignore filter name lookup errors
+          jailConfig = await getJailConfig(jailName);
+          if (jailConfig && jailConfig.config) {
+            logpath = jailConfig.config.logpath;
+          }
+        } catch (configErr) {
+          console.warn(`[JAIL ENABLE] Could not get jail config for error message: ${configErr.message}`);
         }
+        
+        // Build troubleshooting suggestions
+        const suggestions = [];
+        
+        if (filterName) {
+          const filterPath = `/etc/fail2ban/filter.d/${filterName}.conf`;
+          suggestions.push(`1. Verify filter file exists and is valid: ls -la ${filterPath}`);
+          suggestions.push(`2. Test filter syntax: sudo fail2ban-regex --test-filter ${filterPath}`);
+        }
+        
+        if (logpath) {
+          const logPaths = logpath.split(/\s+/).filter(p => p.trim());
+          for (const logPath of logPaths) {
+            suggestions.push(`3. Verify log path exists: ls -la ${logPath}`);
+          }
+        }
+        
+        suggestions.push('4. Check fail2ban logs: sudo tail -50 /var/log/fail2ban.log | grep -i "' + jailName + '"');
+        suggestions.push('5. Try restarting fail2ban: sudo systemctl restart fail2ban');
         
         return res.status(500).json({
           success: false,
@@ -553,9 +609,14 @@ router.post('/:name/enable', async (req, res, next) => {
           details: {
             jailName,
             filterName: filterName || 'unknown',
-            suggestion: filterName 
-              ? `Filter file may be missing: /etc/fail2ban/filter.d/${filterName}.conf`
-              : 'Check fail2ban logs for details: /var/log/fail2ban.log',
+            logpath: logpath || 'not specified',
+            commonCauses: [
+              'Filter file syntax error',
+              'Log path does not exist or is not accessible',
+              'Jail configuration error',
+              'fail2ban service needs restart after filter changes',
+            ],
+            troubleshooting: suggestions,
           },
         });
       }
@@ -563,6 +624,10 @@ router.post('/:name/enable', async (req, res, next) => {
       return res.status(500).json({
         success: false,
         error: `Failed to start jail: ${err.message}`,
+        details: {
+          jailName,
+          suggestion: 'Check backend logs and fail2ban logs for details',
+        },
       });
     }
 

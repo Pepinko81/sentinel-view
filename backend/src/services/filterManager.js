@@ -8,6 +8,7 @@ const execFileAsync = promisify(execFile);
 
 const FAIL2BAN_CONFIG_DIR = process.env.FAIL2BAN_CONFIG_DIR || '/etc/fail2ban';
 const FAIL2BAN_FILTER_DIR = path.join(FAIL2BAN_CONFIG_DIR, 'filter.d');
+const FAIL2BAN_REGEX_PATH = process.env.FAIL2BAN_REGEX_PATH || '/usr/bin/fail2ban-regex';
 const SUDO_PATH = process.env.SUDO_PATH || '/usr/bin/sudo';
 
 /**
@@ -350,6 +351,26 @@ async function ensureFilterExists(jailName) {
   
   if (filterFileExists(filterName)) {
     console.log(`[FILTER MANAGER] ✅ Filter file already exists: ${filterPath}`);
+    
+    // Validate filter file syntax
+    try {
+      const validateArgs = [FAIL2BAN_REGEX_PATH, '--test-filter', filterPath];
+      const { stdout, stderr } = await execFileAsync(SUDO_PATH, validateArgs, {
+        timeout: 5000,
+        maxBuffer: 1024 * 1024,
+        encoding: 'utf8',
+      });
+      
+      const output = (stdout + stderr).toLowerCase();
+      if (output.includes('ok') || output.includes('success')) {
+        console.log(`[FILTER MANAGER] ✅ Filter file syntax is valid`);
+      } else {
+        console.warn(`[FILTER MANAGER] ⚠️ Filter file validation warning:`, stdout + stderr);
+      }
+    } catch (validateErr) {
+      console.warn(`[FILTER MANAGER] ⚠️ Could not validate filter syntax: ${validateErr.message}`);
+    }
+    
     return {
       exists: true,
       created: false,
