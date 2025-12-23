@@ -138,8 +138,12 @@ async function runFail2banAction(action, jailName, ignoreNOK = false) {
   });
 
   try {
+    // Use shorter timeout for start/stop actions (10 seconds)
+    // Longer timeout for status (30 seconds)
+    const actionTimeout = (action === 'start' || action === 'stop') ? 10000 : (config.scriptTimeout || 30000);
+    
     const { stdout, stderr } = await execFileAsync(command, args, {
-      timeout: config.scriptTimeout || 30000,
+      timeout: actionTimeout,
       maxBuffer: 5 * 1024 * 1024,
       encoding: 'utf8',
     });
@@ -195,19 +199,51 @@ async function runFail2banAction(action, jailName, ignoreNOK = false) {
 
     return { stdout, stderr, nok: false };
   } catch (err) {
+    // Check if process was killed (timeout or signal)
+    const wasKilled = err.killed === true || err.signal !== null;
+    
     // Check if it's a NOK in the error message
     const isNOK = (err.message || '').toLowerCase().includes('nok');
-    if (isNOK && ignoreNOK) {
+    
+    // If process was killed and ignoreNOK is true, check if it might be OK
+    // (e.g., jail already in desired state)
+    if ((wasKilled || isNOK) && ignoreNOK) {
+      console.warn(`[FAIL2BAN CONTROL] Process ${wasKilled ? 'killed' : 'NOK'} for ${action} ${jailName}, but ignoreNOK=true`);
       appendAuditLog({
         jail: jailName,
         action,
         step: 'after_exec',
         command,
         args,
-        result: 'nok_ignored',
+        result: wasKilled ? 'killed_ignored' : 'nok_ignored',
         error: err.message,
+        killed: wasKilled,
       });
-      return { stdout: '', stderr: err.message, nok: true };
+      return { stdout: '', stderr: err.message, nok: true, killed: wasKilled };
+    }
+
+    // If process was killed, provide more helpful error message
+    if (wasKilled) {
+      const timeoutMsg = err.code === 'ETIMEDOUT' || err.killed === true
+        ? 'Command timed out'
+        : `Process was killed (signal: ${err.signal || 'unknown'})`;
+      
+      const enhancedError = new Error(`${timeoutMsg}: ${action} ${jailName}. This may indicate the jail is already in the desired state or fail2ban is unresponsive.`);
+      enhancedError.killed = true;
+      enhancedError.code = err.code;
+      enhancedError.signal = err.signal;
+      
+      appendAuditLog({
+        jail: jailName,
+        action,
+        step: 'after_exec',
+        command,
+        args,
+        result: 'error',
+        error: enhancedError.message,
+        killed: true,
+      });
+      throw enhancedError;
     }
 
     appendAuditLog({

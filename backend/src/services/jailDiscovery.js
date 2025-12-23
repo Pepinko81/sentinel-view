@@ -161,7 +161,7 @@ async function getJailRuntimeState(jailName) {
   try {
     const args = [FAIL2BAN_CLIENT_PATH, 'status', jailName];
     const { stdout, stderr } = await execFileAsync(SUDO_PATH, args, {
-      timeout: 10000,
+      timeout: 5000, // Reduced timeout for faster response (5 seconds instead of 10)
       maxBuffer: 5 * 1024 * 1024,
       encoding: 'utf8',
     });
@@ -203,6 +203,13 @@ async function getJailRuntimeState(jailName) {
       message.includes('error   nok') ||
       message.includes('error nok')
     ) {
+      return { enabled: false };
+    }
+    
+    // If process was killed (timeout), assume jail is disabled or unavailable
+    // This prevents slow requests from blocking the entire API
+    if (err.killed === true || err.code === 'ETIMEDOUT') {
+      console.warn(`[JAIL DISCOVERY] Timeout getting status for ${jailName}, assuming disabled`);
       return { enabled: false };
     }
     

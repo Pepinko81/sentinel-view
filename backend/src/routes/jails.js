@@ -198,7 +198,7 @@ router.get('/', async (req, res, next) => {
       let totalBanned = undefined;
       
       if (isEnabled) {
-        // Jail is active - get real status
+        // Jail is active - get real status (with timeout handled by getJailRuntimeState)
         try {
           const runtimeState = await getJailRuntimeState(jailName);
           if (runtimeState.enabled && runtimeState.status) {
@@ -210,8 +210,12 @@ router.get('/', async (req, res, next) => {
             totalBanned = parsedStatus.totalBanned;
           }
         } catch (err) {
-          // If status check fails for active jail, log but don't fail
-          console.warn(`[JAILS API] Failed to get status for active jail ${jailName}: ${err.message}`);
+          // If status check fails for active jail (timeout or error), log but don't fail
+          // Use defaults: jail is enabled but banned count unknown
+          const isTimeout = err.killed === true || err.code === 'ETIMEDOUT';
+          console.warn(`[JAILS API] ${isTimeout ? 'Timeout' : 'Failed'} getting status for active jail ${jailName}: ${err.message}`);
+          currentlyBanned = 0; // Default to 0 if we can't get status
+          bannedIPsRaw = [];
         }
       } else {
         // Jail is disabled - banned count is always 0
@@ -907,13 +911,15 @@ router.post('/:name/toggle', async (req, res, next) => {
     let actionResult;
     try {
       actionResult = await runFail2banAction(action, jailName, true); // ignoreNOK = true
-      console.log(`[JAIL TOGGLE] Action ${action} executed, NOK: ${actionResult.nok}`);
+      console.log(`[JAIL TOGGLE] Action ${action} executed, NOK: ${actionResult.nok}, Killed: ${actionResult.killed}`);
     } catch (err) {
-      // Only fail if it's not a NOK error
+      // Check if it's a NOK error or killed process
       const isNOK = (err.message || '').toLowerCase().includes('nok');
-      if (isNOK) {
-        console.log(`[JAIL TOGGLE] Received NOK for ${action}, checking if jail is in desired state`);
-        actionResult = { stdout: '', stderr: err.message, nok: true };
+      const wasKilled = err.killed === true || err.signal !== null;
+      
+      if (isNOK || wasKilled) {
+        console.log(`[JAIL TOGGLE] Received ${wasKilled ? 'killed' : 'NOK'} for ${action}, checking if jail is in desired state`);
+        actionResult = { stdout: '', stderr: err.message, nok: true, killed: wasKilled };
       } else {
         throw err;
       }
@@ -931,9 +937,12 @@ router.post('/:name/toggle', async (req, res, next) => {
       
       // Check if we achieved the target state
       if (finalState !== targetState) {
-        // If we got NOK and jail is already in target state, that's OK
-        if (actionResult.nok && finalState === currentState) {
-          console.log(`[JAIL TOGGLE] NOK received but jail already in target state - success`);
+        // If we got NOK/killed and jail is already in target state, that's OK
+        // This handles idempotent cases where jail was already in desired state
+        if ((actionResult.nok || actionResult.killed) && finalState === currentState) {
+          console.log(`[JAIL TOGGLE] ${actionResult.killed ? 'Killed' : 'NOK'} received but jail already in target state - success`);
+          // Jail is already in desired state, consider it success
+          finalState = targetState;
         } else {
           verificationFailed = true;
           console.warn(`[JAIL TOGGLE] Verification failed: expected ${targetState}, got ${finalState}`);
