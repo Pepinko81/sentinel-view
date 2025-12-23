@@ -182,17 +182,21 @@ function parseJailStatus(output, jailName) {
   // Track banned count from "Currently banned" (source of truth)
   let currentlyBannedCount = 0;
   let bannedIPListLine = null;
+  let sawCurrentlyLine = false;
+  let parsedCurrentlyLine = false;
   
   for (const line of lines) {
     // Parse "Currently banned" - THIS IS THE SOURCE OF TRUTH for banned count
     // Format: "Currently banned:\t1" or "Currently banned: 1"
     if (line.toLowerCase().includes('currently banned')) {
+      sawCurrentlyLine = true;
       // Remove leading symbols (|, -, `, spaces, tabs)
       const cleaned = line.replace(/^[`|\-|\s\t]+/, '').trim();
       // Match: "Currently banned:" followed by tab/space/colon and number
       const match = cleaned.match(/currently\s+banned[:\s\t]+(\d+)/i);
       if (match) {
         currentlyBannedCount = parseInt(match[1], 10);
+        parsedCurrentlyLine = true;
         result.enabled = true; // If there are banned IPs, jail is enabled
         if (process.env.NODE_ENV === 'development') {
           console.log(`[JAIL PARSER] ${jailName}: Currently banned = ${currentlyBannedCount}`);
@@ -247,16 +251,15 @@ function parseJailStatus(output, jailName) {
   if (bannedIPListLine) {
     // Remove leading symbols (|, -, `, spaces, tabs)
     const cleaned = bannedIPListLine.replace(/^[`|\-|\s\t]+/, '').trim();
-    // Match: "Banned IP list:" followed by tab/space/colon and IPs (comma-separated or single)
+    // Match: "Banned IP list:" followed by tab/space/colon and IPs (whitespace-separated)
     const match = cleaned.match(/banned\s+ip\s+list[:\s\t]+(.+)/i);
     
     if (match && match[1]) {
       const ipListStr = match[1].trim();
       
-      // Extract IPs - handle comma-separated or single IP
+      // Extract IPs - handle whitespace-separated list (spaces/tabs)
       if (ipListStr && ipListStr.length > 0) {
-        // Split by comma and extract IPs from each part
-        const ipParts = ipListStr.split(',');
+        const ipParts = ipListStr.split(/\s+/);
         const extractedIPs = [];
         
         for (const part of ipParts) {
@@ -271,6 +274,11 @@ function parseJailStatus(output, jailName) {
         }
       }
     }
+  }
+  
+  // If we saw a "Currently banned" line but failed to parse it, this is a hard error
+  if (sawCurrentlyLine && !parsedCurrentlyLine) {
+    throw new Error(`Failed to parse "Currently banned" line for jail ${jailName}`);
   }
   
   // CRITICAL: Use "Currently banned" as source of truth
@@ -311,6 +319,60 @@ function parseJailStatus(output, jailName) {
 }
 
 /**
+ * Parse output from test-fail2ban.sh
+ * This script prints multiple blocks:
+ *   JAIL: <name>
+ *   ... fail2ban-client status <jail> output ...
+ *
+ * We reuse parseJailStatus for each block.
+ *
+ * @param {string} output
+ * @returns {Record<string, object>} - Map jailName -> parsed jail status
+ */
+function parseTestFail2ban(output) {
+  const validation = validateOutput(output);
+  if (!validation.valid) {
+    throw new Error(validation.error || 'Invalid test-fail2ban output');
+  }
+
+  const errorCheck = detectFail2banError(output);
+  if (errorCheck.isError) {
+    throw new Error(errorCheck.message || 'fail2ban error in test-fail2ban output');
+  }
+
+  const lines = output.split('\n');
+  const jailBlocks = {};
+  let currentJail = null;
+  let buffer = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const jailMatch = line.match(/^JAIL:\s*(\S+)/);
+    if (jailMatch) {
+      // Flush previous block
+      if (currentJail && buffer.length > 0) {
+        const blockText = buffer.join('\n');
+        const parsed = parseJailStatus(blockText, currentJail);
+        jailBlocks[currentJail] = parsed;
+      }
+      currentJail = jailMatch[1];
+      buffer = [];
+    } else if (currentJail) {
+      buffer.push(rawLine);
+    }
+  }
+
+  // Flush last block
+  if (currentJail && buffer.length > 0) {
+    const blockText = buffer.join('\n');
+    const parsed = parseJailStatus(blockText, currentJail);
+    jailBlocks[currentJail] = parsed;
+  }
+
+  return jailBlocks;
+}
+
+/**
  * Extract jail names from status output
  * @param {string} output - Output from fail2ban-client status
  * @returns {string[]} - Array of jail names
@@ -328,6 +390,7 @@ function extractJailNames(output) {
 module.exports = {
   parseFail2banStatus,
   parseJailStatus,
+  parseTestFail2ban,
   extractJailNames,
   defaultFail2banStatus,
   defaultJailStatus,

@@ -3,6 +3,7 @@ const router = express.Router();
 const { executeScript } = require('../services/scriptExecutor');
 const { parseMonitorOutput, defaultMonitorOutput } = require('../services/parsers/monitorParser');
 const { parseQuickCheck } = require('../services/parsers/monitorParser');
+const { parseTestFail2ban } = require('../services/parsers/fail2banParser');
 const { detectFail2banError, safeParse } = require('../services/parsers/parserUtils');
 const { serializeJailsResponse, serializeJailResponse } = require('../services/serializers/apiSerializer');
 const { inferCategory, inferSeverity } = require('../utils/jailClassifier');
@@ -145,16 +146,31 @@ router.get('/', async (req, res, next) => {
     const configuredJails = monitorData.fail2ban?.jails || [];
     const parsedJails = monitorData.jails || [];
     
+    // Optional: refine bannedCount/bannedIPs using test-fail2ban.sh (real fail2ban-client status <jail>)
+    let testData = {};
+    try {
+      const { stdout: testStdout } = await executeScript('test-fail2ban.sh');
+      testData = parseTestFail2ban(testStdout || '');
+    } catch (err) {
+      console.error('Failed to execute or parse test-fail2ban.sh:', err.message);
+      // Do not crash jails listing – we can still use monitorData
+    }
+    
     // Build jails array strictly from configured (runtime) jails
     const jails = configuredJails.map(jailName => {
       const jailData = parsedJails.find(j => j.name === jailName) || {};
+      const testStatus = testData[jailName] || {};
       
-      const bannedCount = typeof jailData.bannedCount === 'number'
-        ? jailData.bannedCount
-        : 0;
-      const bannedIPsRaw = Array.isArray(jailData.bannedIPs)
-        ? jailData.bannedIPs
-        : [];
+      // banned_count: ONLY from "Currently banned" in fail2ban-client status <jail>
+      const bannedCount = typeof testStatus.bannedCount === 'number'
+        ? testStatus.bannedCount
+        : (typeof jailData.bannedCount === 'number' ? jailData.bannedCount : 0);
+      
+      // banned_ips: from Banned IP list (whitespace-separated) in fail2ban-client status <jail>,
+      // or from monitorData if not available
+      const bannedIPsRaw = Array.isArray(testStatus.bannedIPs)
+        ? testStatus.bannedIPs
+        : (Array.isArray(jailData.bannedIPs) ? jailData.bannedIPs : []);
       
       // enabled:
       // - true if jail appears in configuredJails (fail2ban reports it)
