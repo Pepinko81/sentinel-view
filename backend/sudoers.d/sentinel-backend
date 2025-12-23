@@ -1,0 +1,51 @@
+# ============================================
+# Sentinel Backend - Hardened Sudoers Config
+# ============================================
+# 
+# This configuration allows the backend user to execute
+# ONLY the explicitly listed scripts and commands.
+# NO WILDCARDS - prevents privilege escalation attacks.
+#
+# Installation:
+#   1. Copy this file to /etc/sudoers.d/sentinel-backend
+#   2. Replace 'pepinko' with your actual backend user if different
+#   3. Run: sudo visudo -c (to validate syntax)
+#   4. Run: sudo -u pepinko sudo -l (to verify permissions)
+
+# Cmnd_Alias for Sentinel Backend Scripts
+# Explicitly list each script - NO WILDCARDS
+Cmnd_Alias SENTINEL_SCRIPTS = \
+    /opt/fail2ban-dashboard/scripts/monitor-security.sh, \
+    /opt/fail2ban-dashboard/scripts/quick-check.sh, \
+    /opt/fail2ban-dashboard/scripts/backup-fail2ban.sh, \
+    /opt/fail2ban-dashboard/scripts/test-fail2ban.sh, \
+    /opt/fail2ban-dashboard/scripts/test-filters.sh
+
+# Cmnd_Alias for fail2ban-client (read-only operations)
+# Only status queries - no modification commands
+Cmnd_Alias SENTINEL_FAIL2BAN_READ = \
+    /usr/bin/fail2ban-client status, \
+    /usr/bin/fail2ban-client status *
+
+# Cmnd_Alias for fail2ban-client (jail control operations)
+# Start/stop individual jails - allows any jail name as argument
+Cmnd_Alias SENTINEL_FAIL2BAN_CONTROL = \
+    /usr/bin/fail2ban-client start *, \
+    /usr/bin/fail2ban-client stop *
+
+# Cmnd_Alias for fail2ban-regex (filter testing)
+# Used by test-filters.sh for testing filters against logs
+Cmnd_Alias SENTINEL_REGEX = \
+    /usr/bin/fail2ban-regex
+
+# Cmnd_Alias for systemctl (fail2ban service control)
+# Restart and status check for fail2ban service
+Cmnd_Alias SENTINEL_SYSTEMCTL = \
+    /usr/bin/systemctl restart fail2ban, \
+    /usr/bin/systemctl is-active fail2ban
+
+# Backend user - restricted sudo access
+# Restricted to root only - cannot run as other users
+# Replace 'pepinko' with your actual backend user if different
+pepinko ALL=(root) NOPASSWD: SENTINEL_SCRIPTS, SENTINEL_FAIL2BAN_READ, SENTINEL_FAIL2BAN_CONTROL, SENTINEL_REGEX, SENTINEL_SYSTEMCTL
+

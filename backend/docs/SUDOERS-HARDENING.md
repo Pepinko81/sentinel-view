@@ -45,18 +45,30 @@ Cmnd_Alias SENTINEL_SCRIPTS = \
 
 # Cmnd_Alias for fail2ban-client (read-only operations)
 # Only status queries - no modification commands
-Cmnd_Alias SENTINEL_FAIL2BAN = \
+Cmnd_Alias SENTINEL_FAIL2BAN_READ = \
     /usr/bin/fail2ban-client status, \
     /usr/bin/fail2ban-client status *
+
+# Cmnd_Alias for fail2ban-client (jail control operations)
+# Start/stop individual jails - allows any jail name as argument
+Cmnd_Alias SENTINEL_FAIL2BAN_CONTROL = \
+    /usr/bin/fail2ban-client start *, \
+    /usr/bin/fail2ban-client stop *
 
 # Cmnd_Alias for fail2ban-regex (filter testing)
 # Used by test-filters.sh for testing filters against logs
 Cmnd_Alias SENTINEL_REGEX = \
     /usr/bin/fail2ban-regex
 
+# Cmnd_Alias for systemctl (fail2ban service control)
+# Restart and status check for fail2ban service
+Cmnd_Alias SENTINEL_SYSTEMCTL = \
+    /usr/bin/systemctl restart fail2ban, \
+    /usr/bin/systemctl is-active fail2ban
+
 # Sentinel user - restricted sudo access
 # Restricted to root only - cannot run as other users
-sentinel_user ALL=(root) NOPASSWD: SENTINEL_SCRIPTS, SENTINEL_FAIL2BAN, SENTINEL_REGEX
+sentinel_user ALL=(root) NOPASSWD: SENTINEL_SCRIPTS, SENTINEL_FAIL2BAN_READ, SENTINEL_FAIL2BAN_CONTROL, SENTINEL_REGEX, SENTINEL_SYSTEMCTL
 ```
 
 ### Step 2: Verify Configuration
@@ -90,8 +102,13 @@ sudo -u sentinel_user sudo /opt/fail2ban-dashboard/scripts/monitor-security.sh
 
 ### ✅ Explicit Command List
 - **Before**: `*.sh` wildcard allows any script
-- **After**: Only 5 explicitly listed scripts can execute
-- **Benefit**: New scripts cannot be executed without sudoers update
+- **After**: Only explicitly listed scripts and commands can execute
+- **Benefit**: New scripts/commands cannot be executed without sudoers update
+
+### ✅ Jail Control Commands
+- **fail2ban-client start/stop**: Allows enabling/disabling individual jails
+- **systemctl restart fail2ban**: Allows restarting fail2ban service
+- **Benefit**: Full control over jail lifecycle while maintaining security
 
 ### ✅ Restricted User Context
 - **Before**: `(ALL)` allows running as any user
