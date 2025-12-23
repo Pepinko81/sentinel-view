@@ -83,12 +83,24 @@ sudo /home/pepinko/sentinel-view/backend/scripts/diagnose-jail.sh nginx-webdav-a
 #### Проблем: Jail не може да се стартира с ERROR NOK
 
 **Причини:**
-1. Filter файлът не съществува
+1. Filter файлът не съществува (най-често)
 2. Action файлът не съществува
 3. Невалидна конфигурация в jail файла
 4. Проблем с log файла или пътя
 
-**Решение:**
+**Автоматично решение (препоръчително):**
+
+Backend-ът автоматично проверява и създава filter файлове при опит за enable на jail. Ако filter файлът липсва и има наличен шаблон, той се създава автоматично.
+
+**Поддържани автоматични filter шаблони:**
+- `nginx-webdav-attacks` - WebDAV атаки (PROPFIND, OPTIONS, MKCOL, PUT, DELETE, и т.н.)
+- `nginx-hidden-files` - Опити за достъп до скрити файлове (.env, .git, .aws, и т.н.)
+- `nginx-admin-scanners` - Сканиране на admin панели
+- `nginx-robots-scan` - Прекомерни заявки към robots.txt
+- `nginx-404` - Прекомерни 404 грешки
+- `nginx-error-cycle` - Rewrite цикъл грешки
+
+**Ръчно решение (ако автоматичното не работи):**
 
 1. Проверете конфигурацията на jail-а:
 ```bash
@@ -100,19 +112,38 @@ sudo grep -A 20 "\[nginx-webdav-attacks\]" /etc/fail2ban/jail.d/*.conf /etc/fail
 ls -la /etc/fail2ban/filter.d/nginx-webdav-attacks.conf
 ```
 
-3. Проверете fail2ban логовете:
+3. **Ако filter файлът не съществува**, създайте го:
+```bash
+# Автоматично създаване:
+sudo /home/pepinko/sentinel-view/backend/scripts/create-webdav-filter.sh
+
+# Или ръчно създайте файла:
+sudo nano /etc/fail2ban/filter.d/nginx-webdav-attacks.conf
+```
+
+4. Проверете fail2ban логовете:
 ```bash
 sudo tail -50 /var/log/fail2ban.log | grep -i "nginx-webdav-attacks"
 ```
 
-4. Тествайте filter-а:
+5. Тествайте filter-а (след като е създаден):
 ```bash
 sudo fail2ban-regex /var/log/nginx/access.log /etc/fail2ban/filter.d/nginx-webdav-attacks.conf
 ```
 
-5. Рестартирайте fail2ban услугата:
+6. Рестартирайте fail2ban услугата:
 ```bash
 sudo systemctl restart fail2ban
+```
+
+7. Стартирайте jail-а (от UI или команда):
+```bash
+sudo fail2ban-client start nginx-webdav-attacks
+```
+
+8. Проверете статуса:
+```bash
+sudo fail2ban-client status nginx-webdav-attacks
 ```
 
 #### Проблем: Restart timeout
@@ -176,7 +207,12 @@ Cmnd_Alias SENTINEL_SYSTEMCTL = \
     /usr/bin/systemctl restart fail2ban, \
     /usr/bin/systemctl is-active fail2ban
 
-sentinel_user ALL=(root) NOPASSWD: SENTINEL_SCRIPTS, SENTINEL_FAIL2BAN_READ, SENTINEL_FAIL2BAN_CONTROL, SENTINEL_REGEX, SENTINEL_SYSTEMCTL
+# Cmnd_Alias for filter file management
+# Allows creating filter files automatically when enabling jails
+Cmnd_Alias SENTINEL_FILTER_MGMT = \
+    /home/pepinko/sentinel-view/backend/scripts/create-filter-file.sh
+
+sentinel_user ALL=(root) NOPASSWD: SENTINEL_SCRIPTS, SENTINEL_FAIL2BAN_READ, SENTINEL_FAIL2BAN_CONTROL, SENTINEL_REGEX, SENTINEL_SYSTEMCTL, SENTINEL_FILTER_MGMT
 ```
 
 ## Бележки

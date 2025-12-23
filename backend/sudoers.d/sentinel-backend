@@ -44,8 +44,14 @@ Cmnd_Alias SENTINEL_SYSTEMCTL = \
     /usr/bin/systemctl restart fail2ban, \
     /usr/bin/systemctl is-active fail2ban
 
+# Cmnd_Alias for filter file management
+# Allows creating filter files automatically when enabling jails
+# Uses helper script for security
+Cmnd_Alias SENTINEL_FILTER_MGMT = \
+    /home/pepinko/sentinel-view/backend/scripts/create-filter-file.sh
+
 # Backend user - restricted sudo access
 # Restricted to root only - cannot run as other users
 # Replace 'pepinko' with your actual backend user if different
-pepinko ALL=(root) NOPASSWD: SENTINEL_SCRIPTS, SENTINEL_FAIL2BAN_READ, SENTINEL_FAIL2BAN_CONTROL, SENTINEL_REGEX, SENTINEL_SYSTEMCTL
+pepinko ALL=(root) NOPASSWD: SENTINEL_SCRIPTS, SENTINEL_FAIL2BAN_READ, SENTINEL_FAIL2BAN_CONTROL, SENTINEL_REGEX, SENTINEL_SYSTEMCTL, SENTINEL_FILTER_MGMT
 

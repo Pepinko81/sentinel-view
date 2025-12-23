@@ -3,6 +3,7 @@ const router = express.Router();
 const { executeScript } = require('../services/scriptExecutor');
 const { runFail2banAction, verifyJailState, getGlobalFail2banStatus } = require('../services/fail2banControl');
 const { discoverConfiguredJails, getJailRuntimeState } = require('../services/jailDiscovery');
+const { ensureFilterExists, getFilterName, FILTER_TEMPLATES } = require('../services/filterManager');
 const { parseMonitorOutput, defaultMonitorOutput } = require('../services/parsers/monitorParser');
 const { parseQuickCheck } = require('../services/parsers/monitorParser');
 const { parseTestFail2ban } = require('../services/parsers/fail2banParser');
@@ -462,10 +463,63 @@ router.post('/:name/enable', async (req, res, next) => {
       });
     }
 
+    // Ensure filter file exists before attempting to start
+    // This prevents "jail does not exist" errors when filter is missing
+    try {
+      const filterCheck = await ensureFilterExists(jailName);
+      
+      if (!filterCheck.exists && !filterCheck.created) {
+        // Filter file doesn't exist and couldn't be created automatically
+        return res.status(500).json({
+          success: false,
+          error: `Filter file missing: ${filterCheck.filterName || 'unknown'}.conf. ${filterCheck.message}`,
+          details: {
+            filterName: filterCheck.filterName,
+            message: filterCheck.message,
+            suggestion: filterCheck.filterName && filterCheck.filterName in FILTER_TEMPLATES
+              ? 'Filter template exists but creation failed. Check sudo permissions.'
+              : 'No template available for this filter. Please create it manually.',
+          },
+        });
+      }
+      
+      // If filter was just created, log it
+      if (filterCheck.created) {
+        console.log(`[JAIL ENABLE] Auto-created filter file: ${filterCheck.filterName}.conf`);
+      }
+    } catch (err) {
+      // If filter check fails, still try to start (maybe filter exists but check failed)
+      console.warn(`[JAIL ENABLE] Filter check failed for ${jailName}: ${err.message}`);
+    }
+
     // Execute start command
     try {
       await runFail2banAction('start', jailName);
     } catch (err) {
+      // Provide more helpful error message if jail doesn't exist
+      const errorMessage = err.message || '';
+      if (errorMessage.includes('does not exist') || errorMessage.includes('NOK')) {
+        // Try to get filter name for better error message
+        let filterName = null;
+        try {
+          filterName = await getFilterName(jailName);
+        } catch (filterErr) {
+          // Ignore filter name lookup errors
+        }
+        
+        return res.status(500).json({
+          success: false,
+          error: `Failed to start jail: ${errorMessage}`,
+          details: {
+            jailName,
+            filterName: filterName || 'unknown',
+            suggestion: filterName 
+              ? `Filter file may be missing: /etc/fail2ban/filter.d/${filterName}.conf`
+              : 'Check fail2ban logs for details: /var/log/fail2ban.log',
+          },
+        });
+      }
+      
       return res.status(500).json({
         success: false,
         error: `Failed to start jail: ${err.message}`,

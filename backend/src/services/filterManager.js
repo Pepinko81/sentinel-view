@@ -1,0 +1,315 @@
+const fs = require('fs');
+const path = require('path');
+const { promisify } = require('util');
+const { execFile } = require('child_process');
+const config = require('../config/config');
+
+const execFileAsync = promisify(execFile);
+
+const FAIL2BAN_CONFIG_DIR = process.env.FAIL2BAN_CONFIG_DIR || '/etc/fail2ban';
+const FAIL2BAN_FILTER_DIR = path.join(FAIL2BAN_CONFIG_DIR, 'filter.d');
+const SUDO_PATH = process.env.SUDO_PATH || '/usr/bin/sudo';
+
+/**
+ * Get jail configuration from config files
+ * @param {string} jailName
+ * @returns {Promise<{ configFile: string, config: object }>}
+ */
+async function getJailConfig(jailName) {
+  const configFiles = [];
+  
+  // Check jail.d/*.conf files
+  const jailDir = path.join(FAIL2BAN_CONFIG_DIR, 'jail.d');
+  if (fs.existsSync(jailDir)) {
+    const files = fs.readdirSync(jailDir);
+    for (const file of files) {
+      if (file.endsWith('.conf')) {
+        configFiles.push(path.join(jailDir, file));
+      }
+    }
+  }
+  
+  // Check jail.local
+  const jailLocalPath = path.join(FAIL2BAN_CONFIG_DIR, 'jail.local');
+  if (fs.existsSync(jailLocalPath)) {
+    configFiles.push(jailLocalPath);
+  }
+  
+  // Search for jail configuration
+  for (const configFile of configFiles) {
+    try {
+      const content = fs.readFileSync(configFile, 'utf8');
+      const jailConfig = extractJailConfig(content, jailName);
+      if (jailConfig) {
+        return {
+          configFile,
+          config: jailConfig,
+        };
+      }
+    } catch (err) {
+      // Continue to next file
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Extract jail configuration from config file content
+ * @param {string} content - Config file content
+ * @param {string} jailName - Jail name to extract
+ * @returns {object|null} - Jail configuration object
+ */
+function extractJailConfig(content, jailName) {
+  const lines = content.split('\n');
+  let inJailSection = false;
+  const config = {};
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    // Check for jail section start
+    if (line === `[${jailName}]`) {
+      inJailSection = true;
+      continue;
+    }
+    
+    // Check for next section (end of current jail)
+    if (inJailSection && line.startsWith('[') && line.endsWith(']')) {
+      break;
+    }
+    
+    // Parse configuration lines
+    if (inJailSection && line.includes('=')) {
+      const [key, ...valueParts] = line.split('=');
+      const value = valueParts.join('=').trim();
+      config[key.trim()] = value;
+    }
+  }
+  
+  return inJailSection && Object.keys(config).length > 0 ? config : null;
+}
+
+/**
+ * Get filter name from jail configuration
+ * @param {string} jailName
+ * @returns {Promise<string|null>} - Filter name or null if not found
+ */
+async function getFilterName(jailName) {
+  const jailConfig = await getJailConfig(jailName);
+  if (!jailConfig || !jailConfig.config) {
+    return null;
+  }
+  
+  // Filter name is usually specified as "filter = <name>"
+  // If not specified, it defaults to jail name
+  return jailConfig.config.filter || jailName;
+}
+
+/**
+ * Check if filter file exists
+ * @param {string} filterName
+ * @returns {boolean}
+ */
+function filterFileExists(filterName) {
+  const filterPath = path.join(FAIL2BAN_FILTER_DIR, `${filterName}.conf`);
+  return fs.existsSync(filterPath);
+}
+
+/**
+ * Filter templates for common jail types
+ */
+const FILTER_TEMPLATES = {
+  'nginx-webdav-attacks': `# fail2ban filter configuration for nginx WebDAV attacks
+# Detects WebDAV exploitation attempts (PROPFIND, OPTIONS, MKCOL, PUT, DELETE, etc.)
+
+[Definition]
+
+# Match WebDAV methods that are commonly used in attacks
+failregex = ^<HOST> -.*"(PROPFIND|OPTIONS|MKCOL|PUT|DELETE|MOVE|COPY|LOCK|UNLOCK).*HTTP.*
+            ^<HOST> -.*"PROPFIND.*HTTP.*
+            ^<HOST> -.*"OPTIONS.*HTTP.*
+            ^<HOST> -.*"MKCOL.*HTTP.*
+            ^<HOST> -.*"PUT.*HTTP.*
+            ^<HOST> -.*"DELETE.*HTTP.*
+            ^<HOST> -.*"MOVE.*HTTP.*
+            ^<HOST> -.*"COPY.*HTTP.*
+            ^<HOST> -.*"LOCK.*HTTP.*
+            ^<HOST> -.*"UNLOCK.*HTTP.*
+
+ignoreregex = 
+`,
+
+  'nginx-hidden-files': `# fail2ban filter configuration for nginx hidden files access attempts
+# Detects attempts to access hidden files (.env, .git, .aws, etc.)
+
+[Definition]
+
+failregex = ^<HOST> -.*"(GET|POST|HEAD|PROPFIND).*/(\\.env|\\.git|\\.aws|\\.ht|config.*\\.php|\\.svn|\\.hg|\\.bzr).*HTTP.*
+            ^<HOST> -.*"(GET|POST|HEAD|PROPFIND).*/(wp-config\\.php|configuration\\.php|config\\.xml|\\.DS_Store|\\.htpasswd).*HTTP.*
+            ^<HOST> -.*"(GET|POST|HEAD|PROPFIND).*(/\\.env\\b|/\\.git\\b|/\\.aws\\b|/\\.ht\\b).*HTTP.*
+
+ignoreregex = 
+`,
+
+  'nginx-admin-scanners': `# fail2ban filter configuration for nginx admin scanner attacks
+# Detects attempts to access admin panels and common paths
+
+[Definition]
+
+failregex = ^<HOST> -.*"(GET|POST|HEAD).*(/admin|/wp-admin|/wp-login|/administrator|/phpmyadmin|/mysql|/sql|/pma).*HTTP.*
+            ^<HOST> -.*"(GET|POST|HEAD).*(/admin\\.php|/login\\.php|/wp-login\\.php|/administrator/index\\.php).*HTTP.*
+
+ignoreregex = 
+`,
+
+  'nginx-robots-scan': `# fail2ban filter configuration for nginx robots.txt scanning
+# Detects excessive robots.txt requests (often used for reconnaissance)
+
+[Definition]
+
+failregex = ^<HOST> -.*"(GET|HEAD).*/robots\\.txt.*HTTP.*
+
+ignoreregex = 
+`,
+
+  'nginx-404': `# fail2ban filter configuration for nginx 404 errors
+# Detects excessive 404 errors (often indicates scanning)
+
+[Definition]
+
+failregex = ^<HOST> -.*"GET.*HTTP/[0-9.]+" 404 .*
+
+ignoreregex = 
+`,
+
+  'nginx-error-cycle': `# fail2ban filter configuration for nginx rewrite cycle errors
+# Detects rewrite or internal redirection cycle errors
+
+[Definition]
+
+failregex = .*rewrite or internal redirection cycle.*client: <HOST>.*
+
+ignoreregex = 
+
+datepattern = {^LN-BEG}
+`,
+};
+
+/**
+ * Create filter file automatically based on filter name
+ * @param {string} filterName
+ * @returns {Promise<{ created: boolean, path: string, message: string }>}
+ */
+async function createFilterFile(filterName) {
+  const filterPath = path.join(FAIL2BAN_FILTER_DIR, `${filterName}.conf`);
+  
+  // Check if already exists
+  if (fs.existsSync(filterPath)) {
+    return {
+      created: false,
+      path: filterPath,
+      message: 'Filter file already exists',
+    };
+  }
+  
+  // Get template based on filter name
+  const template = FILTER_TEMPLATES[filterName];
+  
+  if (!template) {
+    return {
+      created: false,
+      path: filterPath,
+      message: `No template available for filter: ${filterName}. Please create it manually.`,
+    };
+  }
+  
+  // Create filter file using helper script via sudo
+  try {
+    // Write to temp file first
+    const tempFile = path.join(__dirname, `../tmp/${filterName}.conf.tmp`);
+    const tempDir = path.dirname(tempFile);
+    
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    fs.writeFileSync(tempFile, template, 'utf8');
+    
+    // Use helper script to create filter file
+    const scriptPath = path.join(__dirname, '../scripts/create-filter-file.sh');
+    const args = [scriptPath, filterName, tempFile];
+    
+    await execFileAsync(SUDO_PATH, args, {
+      timeout: 10000,
+      maxBuffer: 1024 * 1024,
+      encoding: 'utf8',
+    });
+    
+    // Clean up temp file
+    try {
+      fs.unlinkSync(tempFile);
+    } catch (err) {
+      // Ignore cleanup errors
+    }
+    
+    return {
+      created: true,
+      path: filterPath,
+      message: `Filter file created successfully: ${filterPath}`,
+    };
+  } catch (err) {
+    return {
+      created: false,
+      path: filterPath,
+      message: `Failed to create filter file: ${err.message}`,
+    };
+  }
+}
+
+/**
+ * Ensure filter file exists for a jail, create it if missing
+ * @param {string} jailName
+ * @returns {Promise<{ exists: boolean, created: boolean, filterName: string, message: string }>}
+ */
+async function ensureFilterExists(jailName) {
+  const filterName = await getFilterName(jailName);
+  
+  if (!filterName) {
+    return {
+      exists: false,
+      created: false,
+      filterName: null,
+      message: `Could not determine filter name for jail: ${jailName}`,
+    };
+  }
+  
+  if (filterFileExists(filterName)) {
+    return {
+      exists: true,
+      created: false,
+      filterName,
+      message: `Filter file already exists: ${filterName}.conf`,
+    };
+  }
+  
+  // Try to create filter file
+  const result = await createFilterFile(filterName);
+  
+  return {
+    exists: result.created,
+    created: result.created,
+    filterName,
+    message: result.message,
+  };
+}
+
+module.exports = {
+  getJailConfig,
+  getFilterName,
+  filterFileExists,
+  createFilterFile,
+  ensureFilterExists,
+  FILTER_TEMPLATES,
+};
+

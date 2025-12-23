@@ -44,8 +44,14 @@ if [ -n "$FILTER_NAME" ]; then
     FILTER_FILE="/etc/fail2ban/filter.d/${FILTER_NAME}.conf"
     if [ -f "$FILTER_FILE" ]; then
         echo "   ✅ Filter file exists: $FILTER_FILE"
+        echo "   File size: $(stat -c%s "$FILTER_FILE" 2>/dev/null || echo "unknown") bytes"
     else
         echo "   ❌ Filter file NOT found: $FILTER_FILE"
+        echo ""
+        echo "   SOLUTION: Create the filter file using:"
+        echo "   sudo /home/pepinko/sentinel-view/backend/scripts/create-webdav-filter.sh"
+        echo ""
+        echo "   Or manually create $FILTER_FILE with appropriate failregex patterns"
     fi
 else
     echo "   ⚠️  Filter name not found in configuration"
@@ -96,5 +102,19 @@ echo ""
 
 echo "=========================================="
 echo "Diagnosis complete"
+echo "=========================================="
+echo ""
+echo "Common solutions:"
+echo "1. If filter file is missing, create it:"
+echo "   sudo /home/pepinko/sentinel-view/backend/scripts/create-webdav-filter.sh"
+echo ""
+echo "2. After creating filter, restart fail2ban:"
+echo "   sudo systemctl restart fail2ban"
+echo ""
+echo "3. Then start the jail:"
+echo "   sudo fail2ban-client start $JAIL_NAME"
+echo ""
+echo "4. Verify jail is running:"
+echo "   sudo fail2ban-client status $JAIL_NAME"
 echo "=========================================="
 
