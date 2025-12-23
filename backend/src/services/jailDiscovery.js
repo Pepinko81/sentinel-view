@@ -15,9 +15,10 @@ const FAIL2BAN_CLIENT_PATH = process.env.FAIL2BAN_CLIENT_PATH || '/usr/bin/fail2
  * Discover all configured jails by scanning fail2ban config files.
  * This is the SOURCE OF TRUTH for jail existence.
  * 
- * Scans:
- * - /etc/fail2ban/jail.d/*.conf
- * - /etc/fail2ban/jail.local
+ * Scans in order (later files override earlier):
+ * - /etc/fail2ban/jail.conf (default fail2ban configuration)
+ * - /etc/fail2ban/jail.d/*.conf (package-specific overrides)
+ * - /etc/fail2ban/jail.local (local overrides)
  * 
  * @returns {Promise<string[]>} Array of jail names
  */
@@ -26,7 +27,24 @@ async function discoverConfiguredJails() {
   const errors = [];
 
   try {
-    // Scan jail.d/*.conf files
+    // 1. Scan jail.conf (default fail2ban configuration)
+    // This contains standard jails that come with fail2ban installation
+    const jailConfPath = path.join(FAIL2BAN_CONFIG_DIR, 'jail.conf');
+    if (fs.existsSync(jailConfPath)) {
+      try {
+        const content = fs.readFileSync(jailConfPath, 'utf8');
+        const jails = extractJailNamesFromConfig(content);
+        jails.forEach(name => jailNames.add(name));
+        if (process.env.NODE_ENV === 'development' && jails.length > 0) {
+          console.log(`[JAIL DISCOVERY] Found ${jails.length} jails in jail.conf: ${jails.join(', ')}`);
+        }
+      } catch (err) {
+        errors.push(`Failed to read jail.conf: ${err.message}`);
+      }
+    }
+
+    // 2. Scan jail.d/*.conf files (package-specific overrides)
+    // These override settings from jail.conf
     const jailDir = path.join(FAIL2BAN_CONFIG_DIR, 'jail.d');
     if (fs.existsSync(jailDir)) {
       try {
@@ -48,7 +66,8 @@ async function discoverConfiguredJails() {
       }
     }
 
-    // Scan jail.local
+    // 3. Scan jail.local (local overrides)
+    // This is the highest priority and overrides everything
     const jailLocalPath = path.join(FAIL2BAN_CONFIG_DIR, 'jail.local');
     if (fs.existsSync(jailLocalPath)) {
       try {
