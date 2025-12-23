@@ -2,7 +2,7 @@ const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
-const { parseJailStatus } = require('./parsers/fail2banParser');
+const { parseJailStatus, parseFail2banStatus } = require('./parsers/fail2banParser');
 const { detectFail2banError, validateOutput } = require('./parsers/parserUtils');
 const config = require('../config/config');
 
@@ -32,6 +32,74 @@ function appendAuditLog(entry) {
   } catch (err) {
     // Audit logging failures must never crash the API
     console.error('Failed to write jail audit log:', err.message);
+  }
+}
+
+/**
+ * Get global fail2ban status (no jail specified).
+ * Uses: sudo /usr/bin/fail2ban-client status
+ *
+ * @returns {Promise<{ status: string, jails: string[] }>}
+ */
+async function getGlobalFail2banStatus() {
+  // Basic safety: only run in environments where fail2ban is expected
+  if (!config.fail2banAvailable && config.nodeEnv === 'production') {
+    throw new Error('Fail2ban is marked as unavailable in production. Global status blocked.');
+  }
+
+  const args = [FAIL2BAN_CLIENT_PATH, 'status'];
+  const command = SUDO_PATH;
+
+  appendAuditLog({
+    jail: null,
+    action: 'status_global',
+    step: 'before_exec',
+    command,
+    args,
+    result: 'pending',
+  });
+
+  try {
+    const { stdout, stderr } = await execFileAsync(command, args, {
+      timeout: config.scriptTimeout || 30000,
+      maxBuffer: 5 * 1024 * 1024,
+      encoding: 'utf8',
+    });
+
+    appendAuditLog({
+      jail: null,
+      action: 'status_global',
+      step: 'after_exec',
+      command,
+      args,
+      result: 'success',
+      stdout: stdout.trim(),
+      stderr: stderr.trim(),
+    });
+
+    const errorCheck = detectFail2banError(stdout || '', stderr || '');
+    if (errorCheck.isError) {
+      const err = new Error(errorCheck.message || 'fail2ban error');
+      err.errorType = errorCheck.errorType;
+      throw err;
+    }
+
+    const parsed = parseFail2banStatus(stdout);
+    return {
+      status: parsed.status || 'unknown',
+      jails: parsed.jails || [],
+    };
+  } catch (err) {
+    appendAuditLog({
+      jail: null,
+      action: 'status_global',
+      step: 'after_exec',
+      command,
+      args,
+      result: 'error',
+      error: err.message,
+    });
+    throw err;
   }
 }
 
@@ -147,6 +215,7 @@ async function verifyJailState(jailName) {
 module.exports = {
   runFail2banAction,
   verifyJailState,
+  getGlobalFail2banStatus,
   appendAuditLog,
 };
 
