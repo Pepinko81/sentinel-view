@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchJails, unbanIP, toggleJail, banIP, calculateStats } from "@/lib/apiService";
+import { fetchJails, unbanIP, toggleJail, banIP, restartFail2ban, calculateStats } from "@/lib/apiService";
 import { useToast } from "@/hooks/use-toast";
 
 const REFRESH_INTERVAL = 30000; // 30 seconds
@@ -75,6 +75,25 @@ export const useJails = () => {
     },
   });
 
+  const restartMutation = useMutation({
+    mutationFn: () => restartFail2ban(),
+    onSuccess: () => {
+      // Invalidate and refetch jails after restart
+      queryClient.invalidateQueries({ queryKey: ["jails"] });
+      toast({
+        title: "Fail2ban Restarted",
+        description: "Service restarted successfully. Refreshing jail data...",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Restart Failed",
+        description: error.message || "Failed to restart fail2ban service",
+        variant: "destructive",
+      });
+    },
+  });
+
   return {
     jails: query.data?.jails ?? [],
     lastUpdated: query.data?.lastUpdated ?? null,
@@ -88,7 +107,9 @@ export const useJails = () => {
     unbanIP: unbanMutation.mutate,
     toggleJail: toggleMutation.mutate,
     banIP: banMutation.mutate,
+    restartFail2ban: restartMutation.mutate,
     isUnbanning: unbanMutation.isPending,
     isToggling: toggleMutation.isPending,
+    isRestarting: restartMutation.isPending,
   };
 };

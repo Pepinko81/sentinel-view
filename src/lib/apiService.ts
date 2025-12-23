@@ -207,3 +207,24 @@ export const banIP = async (jailName: string, ip: string): Promise<boolean> => {
   }
 };
 
+/**
+ * Restart fail2ban service
+ * POST /api/fail2ban/restart
+ */
+export interface RestartFail2banResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+  timestamp: string;
+}
+
+export const restartFail2ban = async (): Promise<RestartFail2banResponse> => {
+  try {
+    const response = await apiClient.post<RestartFail2banResponse>('/api/fail2ban/restart');
+    return response;
+  } catch (error) {
+    console.error('Restart fail2ban failed:', error);
+    throw error;
+  }
+};
+
