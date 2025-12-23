@@ -152,14 +152,35 @@ export const unbanIP = async (jailName: string, ip: string): Promise<boolean> =>
 
 /**
  * Toggle jail enabled/disabled
- * NOTE: This endpoint may not exist yet in backend
- * For now, this is a placeholder that will fail gracefully
  */
 export const toggleJail = async (jailName: string): Promise<boolean> => {
   try {
-    // TODO: Implement when backend endpoint is available
-    // await apiClient.post(`/api/jails/${encodeURIComponent(jailName)}/toggle`);
-    throw new Error('Toggle jail endpoint not yet implemented in backend');
+    // 1) Вземаме текущото състояние на jail-а
+    const jail = await fetchJail(jailName);
+
+    // 2) Избираме правилния endpoint според текущия enabled флаг
+    const targetEnabled = !jail.enabled;
+    const actionPath = targetEnabled ? 'enable' : 'disable';
+
+    type ToggleResponse = {
+      success: boolean;
+      jail?: string;
+      enabled?: boolean;
+      message?: string;
+      error?: string;
+    };
+
+    const response = await apiClient.post<ToggleResponse>(
+      `/api/jails/${encodeURIComponent(jailName)}/${actionPath}`
+    );
+
+    if (!response.success) {
+      // backend винаги връща error при неуспех – показваме го в UI
+      throw new Error(response.error || response.message || 'Failed to toggle jail');
+    }
+
+    // Връщаме новия enabled статус (true ако вече е включен, false ако е изключен)
+    return response.enabled ?? targetEnabled;
   } catch (error) {
     console.error('Toggle jail failed:', error);
     throw error;
