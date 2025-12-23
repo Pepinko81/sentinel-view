@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { executeScript } = require('../services/scriptExecutor');
+const { runFail2banAction, verifyJailState } = require('../services/fail2banControl');
 const { parseMonitorOutput, defaultMonitorOutput } = require('../services/parsers/monitorParser');
 const { parseQuickCheck } = require('../services/parsers/monitorParser');
 const { parseTestFail2ban } = require('../services/parsers/fail2banParser');
@@ -352,6 +353,201 @@ router.get('/:name', async (req, res, next) => {
     cache.set(cacheKey, response, config.cache.jailsTTL);
     res.setHeader('X-API-Version', API_VERSION);
     res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/jails/:name/enable
+ * Safely enable a fail2ban jail at runtime (no config changes).
+ */
+router.post('/:name/enable', async (req, res, next) => {
+  const jailName = req.params.name;
+
+  try {
+    if (!isValidJailName(jailName)) {
+      return res.status(400).json({
+        success: false,
+        jail: jailName,
+        status: 'disabled',
+        message: 'Invalid jail name',
+      });
+    }
+
+    // Ensure fail2ban is available
+    if (!config.fail2banAvailable && config.nodeEnv === 'production') {
+      return res.status(503).json({
+        success: false,
+        jail: jailName,
+        status: 'disabled',
+        message: 'Fail2ban is not available. Action blocked in production.',
+      });
+    }
+
+    // Get current jail list from monitor-security.sh
+    const { stdout, stderr } = await executeScript('monitor-security.sh');
+    const errorCheck = detectFail2banError(stdout, stderr);
+    if (errorCheck.isError) {
+      return res.status(503).json({
+        success: false,
+        jail: jailName,
+        status: 'disabled',
+        message: `Fail2ban error: ${errorCheck.message}`,
+      });
+    }
+
+    const monitorData = safeParse(parseMonitorOutput, stdout, defaultMonitorOutput);
+    const configuredJails = monitorData.fail2ban?.jails || [];
+
+    if (!configuredJails.includes(jailName)) {
+      return res.status(404).json({
+        success: false,
+        jail: jailName,
+        status: 'disabled',
+        message: `Jail \"${jailName}\" does not exist in current fail2ban status`,
+      });
+    }
+
+    // If jail is already enabled (present in list), treat as idempotent success
+    // We still verify state explicitly after this point.
+    try {
+      await runFail2banAction('start', jailName);
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        jail: jailName,
+        status: 'disabled',
+        message: `Failed to start jail: ${err.message}`,
+      });
+    }
+
+    // Verify final state
+    try {
+      const state = await verifyJailState(jailName);
+      const enabled = Boolean(state.enabled);
+
+      if (!enabled) {
+        return res.status(500).json({
+          success: false,
+          jail: jailName,
+          status: 'disabled',
+          message: 'Verification failed: jail is not enabled after start command',
+        });
+      }
+
+      return res.json({
+        success: true,
+        jail: jailName,
+        status: 'enabled',
+        message: 'Jail enabled successfully',
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        jail: jailName,
+        status: 'disabled',
+        message: `Verification error: ${err.message}`,
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/jails/:name/disable
+ * Safely disable a fail2ban jail at runtime (no config changes).
+ */
+router.post('/:name/disable', async (req, res, next) => {
+  const jailName = req.params.name;
+
+  try {
+    if (!isValidJailName(jailName)) {
+      return res.status(400).json({
+        success: false,
+        jail: jailName,
+        status: 'enabled',
+        message: 'Invalid jail name',
+      });
+    }
+
+    // Ensure fail2ban is available
+    if (!config.fail2banAvailable && config.nodeEnv === 'production') {
+      return res.status(503).json({
+        success: false,
+        jail: jailName,
+        status: 'enabled',
+        message: 'Fail2ban is not available. Action blocked in production.',
+      });
+    }
+
+    // Get current jail list from monitor-security.sh
+    const { stdout, stderr } = await executeScript('monitor-security.sh');
+    const errorCheck = detectFail2banError(stdout, stderr);
+    if (errorCheck.isError) {
+      return res.status(503).json({
+        success: false,
+        jail: jailName,
+        status: 'enabled',
+        message: `Fail2ban error: ${errorCheck.message}`,
+      });
+    }
+
+    const monitorData = safeParse(parseMonitorOutput, stdout, defaultMonitorOutput);
+    const configuredJails = monitorData.fail2ban?.jails || [];
+
+    if (!configuredJails.includes(jailName)) {
+      return res.status(404).json({
+        success: false,
+        jail: jailName,
+        status: 'disabled',
+        message: `Jail \"${jailName}\" does not exist in current fail2ban status`,
+      });
+    }
+
+    // Issue stop command
+    try {
+      await runFail2banAction('stop', jailName);
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        jail: jailName,
+        status: 'enabled',
+        message: `Failed to stop jail: ${err.message}`,
+      });
+    }
+
+    // Verify final state (disabled or missing)
+    try {
+      const state = await verifyJailState(jailName);
+      const enabled = Boolean(state.enabled);
+
+      if (enabled) {
+        return res.status(500).json({
+          success: false,
+          jail: jailName,
+          status: 'enabled',
+          message: 'Verification failed: jail is still enabled after stop command',
+        });
+      }
+
+      return res.json({
+        success: true,
+        jail: jailName,
+        status: 'disabled',
+        message: 'Jail disabled successfully',
+      });
+    } catch (err) {
+      // If verifyJailState treated the jail as missing/disabled, it already returned.
+      // Any error reaching here is a real verification error.
+      return res.status(500).json({
+        success: false,
+        jail: jailName,
+        status: 'enabled',
+        message: `Verification error: ${err.message}`,
+      });
+    }
   } catch (err) {
     next(err);
   }
