@@ -301,8 +301,7 @@ router.get('/:name', async (req, res, next) => {
     // ENABLED STATE (STRICT):
     // - Jail is enabled if it appears in fail2ban jail list (configuredJails)
     // - Banned count / IP list do NOT control enabled/disabled
-    const configuredJails = monitorData.fail2ban?.jails || [];
-    const isEnabled = configuredJails.includes(jailName);
+    const isEnabled = (monitorData.fail2ban?.jails || []).includes(jailName);
     
     const severity = inferSeverity(jailName, bannedCount || bannedIPs.length);
     
