@@ -202,7 +202,10 @@ async function verifyJailState(jailName) {
     if (
       message.toLowerCase().includes('does not exist') ||
       message.toLowerCase().includes('no such jail') ||
-      message.toLowerCase().includes('jail not found')
+      message.toLowerCase().includes('jail not found') ||
+      // fail2ban error format when jail is unknown: "ERROR   NOK: ('nginx-robots-scan',)"
+      message.toLowerCase().includes('error   nok') ||
+      message.toLowerCase().includes('error nok')
     ) {
       return { enabled: false, bannedCount: 0 };
     }
