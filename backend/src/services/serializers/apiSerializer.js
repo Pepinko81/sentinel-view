@@ -49,6 +49,8 @@ function serializeJail(jail) {
       name: '',
       enabled: false,
       bannedIPs: [],
+      banned_count: 0,
+      banned_ips: [],
       category: null,
       filter: null,
       maxRetry: null,
@@ -64,11 +66,27 @@ function serializeJail(jail) {
     // Already array, but ensure it's normalized
     bannedIPs = jail.bannedIPs.map(ip => serializeBannedIP(ip));
   }
+
+  // Derive banned_count and banned_ips without guessing state
+  const bannedCount =
+    typeof jail.banned_count === 'number'
+      ? jail.banned_count
+      : (typeof jail.bannedCount === 'number' ? jail.bannedCount : 0);
+
+  const bannedIpsRaw = Array.isArray(jail.banned_ips)
+    ? jail.banned_ips
+    : (Array.isArray(jail.bannedIPs)
+        ? jail.bannedIPs.map(ip => (typeof ip === 'string' ? ip : ip.ip))
+        : []);
   
   return {
     name: String(jail.name || ''),
     enabled: Boolean(jail.enabled),
+    // Structured list used by frontend
     bannedIPs: bannedIPs,
+    // API contract fields
+    banned_count: bannedCount,
+    banned_ips: bannedIpsRaw,
     // Optional fields - always include, use null if not available
     category: jail.category || null,
     filter: jail.filter || jail.name || null,
