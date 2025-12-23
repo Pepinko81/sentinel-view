@@ -228,18 +228,28 @@ router.get('/', async (req, res, next) => {
         enabled: isEnabled,
         configured: true, // All jails from discovery are configured
         status: isEnabled ? 'ENABLED' : 'DISABLED', // Explicit status field
-        // API contract fields - explicit semantics
-        currently_banned: currentlyBanned, // REAL value from fail2ban-client status
-        banned_ips: bannedIPsRaw, // REAL IPs from fail2ban-client status
-        total_banned: totalBanned, // Historical total (optional, informational)
-        // Backward compatibility aliases
-        banned_count: currentlyBanned, // Deprecated: use currently_banned
-        // Frontend-friendly enriched structure (kept for compatibility)
+        
+        // STRICT API CONTRACT: Clear separation of active vs historical bans
+        active_bans: {
+          count: currentlyBanned, // ONLY from "Currently banned" (runtime state)
+          ips: bannedIPsRaw, // ONLY from "Banned IP list" (runtime state)
+        },
+        
+        historical_bans: {
+          total: totalBanned !== undefined ? totalBanned : null, // ONLY from "Total banned" (historical)
+        },
+        
+        // Backward compatibility aliases (deprecated - use active_bans instead)
+        currently_banned: currentlyBanned,
+        banned_ips: bannedIPsRaw,
+        total_banned: totalBanned,
+        banned_count: currentlyBanned,
         bannedIPs: bannedIPsRaw.map(ip => ({
           ip,
           bannedAt: new Date().toISOString(),
           banCount: 1,
         })),
+        
         category: inferCategory(jailName),
         filter: jailName,
         maxRetry: null,

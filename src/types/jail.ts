@@ -9,13 +9,24 @@ export interface Jail {
   enabled: boolean;
   configured?: boolean; // Always true for jails from API
   status?: 'ENABLED' | 'DISABLED'; // Explicit status field
-  bannedIPs: BannedIP[];
-  banned_ips?: string[]; // Raw IP addresses from fail2ban
-  // Explicit semantics for ban counts
-  currently_banned?: number; // Runtime active bans (source of truth for UI)
-  total_banned?: number; // Historical total (optional, informational)
-  // Backward compatibility
-  banned_count?: number; // Deprecated: use currently_banned
+  
+  // STRICT API CONTRACT: Clear separation of active vs historical bans
+  active_bans: {
+    count: number; // ONLY from "Currently banned" (runtime state)
+    ips: string[]; // ONLY from "Banned IP list" (runtime state)
+  };
+  
+  historical_bans: {
+    total: number | null; // ONLY from "Total banned" (historical, optional)
+  };
+  
+  // Backward compatibility aliases (deprecated - use active_bans instead)
+  bannedIPs?: BannedIP[];
+  banned_ips?: string[];
+  currently_banned?: number;
+  total_banned?: number;
+  banned_count?: number;
+  
   category?: string;
   filter?: string;
   maxRetry?: number;

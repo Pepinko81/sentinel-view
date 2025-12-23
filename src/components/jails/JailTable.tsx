@@ -58,7 +58,7 @@ export function JailTable({
               Category
             </th>
             <th className="p-3 text-center font-mono text-xs uppercase tracking-wider text-muted-foreground">
-              <span title="Currently active banned IPs">Active Bans</span>
+              <span title="Currently active banned IPs (runtime state)">Active Bans</span>
             </th>
             <th className="p-3 text-right font-mono text-xs uppercase tracking-wider text-muted-foreground">
               Actions
@@ -82,7 +82,7 @@ export function JailTable({
                       size="icon"
                       className="h-6 w-6"
                       onClick={() => toggleExpand(jail.name)}
-                      disabled={(jail.currently_banned ?? 0) === 0}
+                      disabled={(jail.active_bans?.count ?? jail.currently_banned ?? 0) === 0}
                     >
                       {isExpanded ? (
                         <ChevronDown className="h-4 w-4 text-primary" />
@@ -121,17 +121,13 @@ export function JailTable({
                     <span
                       className={cn(
                         "font-mono text-sm font-bold",
-                        (jail.currently_banned ?? 0) > 0
+                        (jail.active_bans?.count ?? jail.currently_banned ?? 0) > 0
                           ? "text-destructive"
                           : "text-muted-foreground"
                       )}
-                      title={
-                        jail.total_banned !== undefined && jail.total_banned !== (jail.currently_banned ?? 0)
-                          ? `Active: ${jail.currently_banned ?? 0} | Total (historical): ${jail.total_banned}`
-                          : `Currently active banned IPs: ${jail.currently_banned ?? 0}`
-                      }
+                      title={`Currently active banned IPs (runtime state): ${jail.active_bans?.count ?? jail.currently_banned ?? 0}`}
                     >
-                      {jail.currently_banned ?? 0}
+                      {jail.active_bans?.count ?? jail.currently_banned ?? 0}
                     </span>
                   </td>
                   <td className="p-3 text-right">
@@ -156,14 +152,43 @@ export function JailTable({
                     </Button>
                   </td>
                 </tr>
-                {isExpanded && (jail.currently_banned ?? 0) > 0 && (
+                {isExpanded && (jail.active_bans?.count ?? jail.currently_banned ?? 0) > 0 && (
                   <tr>
-                    <td colSpan={6} className="bg-muted/10 p-0">
-                      <IPList
-                        ips={jail.bannedIPs || (jail.banned_ips?.map(ip => ({ ip, bannedAt: new Date().toISOString(), banCount: 1 })) || [])}
-                        jailName={jail.name}
-                        onUnban={onUnbanIP}
-                      />
+                    <td colSpan={6} className="bg-muted/10 p-4">
+                      <div className="space-y-4">
+                        {/* Active bans section */}
+                        <div>
+                          <h4 className="font-mono text-xs font-semibold text-foreground mb-2">
+                            Active Bans (Runtime State)
+                          </h4>
+                          {jail.active_bans?.ips && jail.active_bans.ips.length > 0 ? (
+                            <IPList
+                              ips={jail.active_bans.ips.map(ip => ({ ip, bannedAt: new Date().toISOString(), banCount: 1 }))}
+                              jailName={jail.name}
+                              onUnban={onUnbanIP}
+                            />
+                          ) : (jail.bannedIPs && jail.bannedIPs.length > 0) ? (
+                            <IPList
+                              ips={jail.bannedIPs}
+                              jailName={jail.name}
+                              onUnban={onUnbanIP}
+                            />
+                          ) : (
+                            <p className="text-muted-foreground text-sm font-mono">
+                              No active banned IPs (count: {jail.active_bans?.count ?? jail.currently_banned ?? 0})
+                            </p>
+                          )}
+                        </div>
+                        
+                        {/* Historical bans section (optional) */}
+                        {jail.historical_bans?.total !== null && jail.historical_bans?.total !== undefined && (
+                          <div className="pt-2 border-t border-border/50">
+                            <p className="text-muted-foreground text-xs font-mono">
+                              Total bans since start: <span className="font-semibold">{jail.historical_bans.total}</span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )}
