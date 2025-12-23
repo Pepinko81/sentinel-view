@@ -14,10 +14,11 @@ import { Jail, JailsResponse, JailStats, BannedIP } from '@/types/jail';
 export const calculateStats = (jails: Jail[]): JailStats => {
   const categories = [...new Set(jails.map((j) => j.category || 'Other'))];
   
-  // Use currently_banned (runtime active bans) for stats, not historical total
+  // Use active_bans.count (runtime active bans) for stats, NOT historical total
   return {
     totalBannedIPs: jails.reduce((sum, jail) => {
-      const activeBans = jail.currently_banned ?? jail.bannedIPs.length ?? 0;
+      // Prefer new structure, fallback to backward compatibility
+      const activeBans = jail.active_bans?.count ?? jail.currently_banned ?? jail.bannedIPs?.length ?? 0;
       return sum + activeBans;
     }, 0),
     activeJails: jails.length,
