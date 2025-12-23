@@ -8,6 +8,11 @@ export interface Jail {
   name: string;
   enabled: boolean;
   bannedIPs: BannedIP[];
+  // Explicit semantics for ban counts
+  currently_banned?: number; // Runtime active bans (source of truth for UI)
+  total_banned?: number; // Historical total (optional, informational)
+  // Backward compatibility
+  banned_count?: number; // Deprecated: use currently_banned
   category?: string;
   filter?: string;
   maxRetry?: number;

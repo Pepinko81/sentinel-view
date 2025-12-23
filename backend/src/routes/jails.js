@@ -162,10 +162,18 @@ router.get('/', async (req, res, next) => {
       const jailData = parsedJails.find(j => j.name === jailName) || {};
       const testStatus = testData[jailName] || {};
       
-      // banned_count: ONLY from "Currently banned" in fail2ban-client status <jail>
-      const bannedCount = typeof testStatus.bannedCount === 'number'
-        ? testStatus.bannedCount
-        : (typeof jailData.bannedCount === 'number' ? jailData.bannedCount : 0);
+      // currently_banned: ONLY from "Currently banned" (runtime active bans)
+      // This is the ONLY value used in UI tables
+      const currentlyBanned = typeof testStatus.currentlyBanned === 'number'
+        ? testStatus.currentlyBanned
+        : (typeof testStatus.bannedCount === 'number'
+            ? testStatus.bannedCount
+            : (typeof jailData.bannedCount === 'number' ? jailData.bannedCount : 0));
+      
+      // total_banned: from "Total banned" (historical, optional, informational)
+      const totalBanned = typeof testStatus.totalBanned === 'number'
+        ? testStatus.totalBanned
+        : (typeof jailData.totalBanned === 'number' ? jailData.totalBanned : undefined);
       
       // banned_ips: from Banned IP list (whitespace-separated) in fail2ban-client status <jail>,
       // or from monitorData if not available
@@ -181,9 +189,12 @@ router.get('/', async (req, res, next) => {
       return {
         name: jailName,
         enabled: isEnabled,
-        // API contract fields
-        banned_count: bannedCount,
-        banned_ips: bannedIPsRaw,
+        // API contract fields - explicit semantics
+        currently_banned: currentlyBanned, // Runtime active bans (used in UI)
+        banned_ips: bannedIPsRaw, // Active banned IP addresses
+        total_banned: totalBanned, // Historical total (optional, informational)
+        // Backward compatibility aliases
+        banned_count: currentlyBanned, // Deprecated: use currently_banned
         // Frontend-friendly enriched structure (kept for compatibility)
         bannedIPs: bannedIPsRaw.map(ip => ({
           ip,

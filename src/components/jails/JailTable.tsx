@@ -58,7 +58,7 @@ export function JailTable({
               Category
             </th>
             <th className="p-3 text-center font-mono text-xs uppercase tracking-wider text-muted-foreground">
-              Banned IPs
+              <span title="Currently active banned IPs">Active Bans</span>
             </th>
             <th className="p-3 text-right font-mono text-xs uppercase tracking-wider text-muted-foreground">
               Actions
@@ -82,7 +82,7 @@ export function JailTable({
                       size="icon"
                       className="h-6 w-6"
                       onClick={() => toggleExpand(jail.name)}
-                      disabled={jail.bannedIPs.length === 0}
+                      disabled={(jail.currently_banned ?? jail.bannedIPs.length) === 0}
                     >
                       {isExpanded ? (
                         <ChevronDown className="h-4 w-4 text-primary" />
@@ -121,12 +121,17 @@ export function JailTable({
                     <span
                       className={cn(
                         "font-mono text-sm font-bold",
-                        jail.bannedIPs.length > 0
+                        (jail.currently_banned ?? jail.bannedIPs.length) > 0
                           ? "text-destructive"
                           : "text-muted-foreground"
                       )}
+                      title={
+                        jail.total_banned !== undefined && jail.total_banned !== (jail.currently_banned ?? jail.bannedIPs.length)
+                          ? `Active: ${jail.currently_banned ?? jail.bannedIPs.length} | Total (historical): ${jail.total_banned}`
+                          : `Currently active banned IPs: ${jail.currently_banned ?? jail.bannedIPs.length}`
+                      }
                     >
-                      {jail.bannedIPs.length}
+                      {jail.currently_banned ?? jail.bannedIPs.length}
                     </span>
                   </td>
                   <td className="p-3 text-right">
@@ -151,7 +156,7 @@ export function JailTable({
                     </Button>
                   </td>
                 </tr>
-                {isExpanded && jail.bannedIPs.length > 0 && (
+                {isExpanded && (jail.currently_banned ?? jail.bannedIPs.length) > 0 && (
                   <tr>
                     <td colSpan={6} className="bg-muted/10 p-0">
                       <IPList
