@@ -67,11 +67,20 @@ function serializeJail(jail) {
     bannedIPs = jail.bannedIPs.map(ip => serializeBannedIP(ip));
   }
 
-  // Derive banned_count and banned_ips without guessing state
-  const bannedCount =
-    typeof jail.banned_count === 'number'
-      ? jail.banned_count
-      : (typeof jail.bannedCount === 'number' ? jail.bannedCount : 0);
+  // Derive banned counts with explicit semantics
+  // currently_banned: runtime active bans (source of truth for UI)
+  const currentlyBanned =
+    typeof jail.currently_banned === 'number'
+      ? jail.currently_banned
+      : (typeof jail.banned_count === 'number'
+          ? jail.banned_count
+          : (typeof jail.bannedCount === 'number' ? jail.bannedCount : 0));
+
+  // total_banned: historical total (optional, informational)
+  const totalBanned =
+    typeof jail.total_banned === 'number'
+      ? jail.total_banned
+      : (typeof jail.totalBanned === 'number' ? jail.totalBanned : undefined);
 
   const bannedIpsRaw = Array.isArray(jail.banned_ips)
     ? jail.banned_ips
@@ -84,9 +93,12 @@ function serializeJail(jail) {
     enabled: Boolean(jail.enabled),
     // Structured list used by frontend
     bannedIPs: bannedIPs,
-    // API contract fields
-    banned_count: bannedCount,
-    banned_ips: bannedIpsRaw,
+    // API contract fields - explicit semantics
+    currently_banned: currentlyBanned, // Runtime active bans (used in UI)
+    banned_ips: bannedIpsRaw, // Active banned IP addresses
+    total_banned: totalBanned, // Historical total (optional, informational)
+    // Backward compatibility aliases
+    banned_count: currentlyBanned, // Deprecated: use currently_banned
     // Optional fields - always include, use null if not available
     category: jail.category || null,
     filter: jail.filter || jail.name || null,

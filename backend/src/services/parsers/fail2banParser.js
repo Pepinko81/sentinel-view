@@ -17,7 +17,9 @@ const defaultJailStatus = {
   name: null,
   enabled: false,
   bannedIPs: [],
-  bannedCount: 0, // Add bannedCount field
+  bannedCount: 0, // Keep for backward compatibility
+  currentlyBanned: 0, // Runtime active bans (source of truth for UI)
+  totalBanned: undefined, // Historical total (optional, informational)
   filter: null,
   maxRetry: null,
   banTime: null,
@@ -179,14 +181,15 @@ function parseJailStatus(output, jailName) {
     bannedIPs: [],
   };
   
-  // Track banned count from "Currently banned" (source of truth)
+  // Track banned counts: "Currently banned" (runtime) and "Total banned" (historical)
   let currentlyBannedCount = 0;
+  let totalBannedCount = null; // Optional, informational only
   let bannedIPListLine = null;
   let sawCurrentlyLine = false;
   let parsedCurrentlyLine = false;
   
   for (const line of lines) {
-    // Parse "Currently banned" - THIS IS THE SOURCE OF TRUTH for banned count
+    // Parse "Currently banned" - THIS IS THE SOURCE OF TRUTH for active bans
     // Format: "Currently banned:\t1" or "Currently banned: 1"
     if (line.toLowerCase().includes('currently banned')) {
       sawCurrentlyLine = true;
@@ -200,6 +203,19 @@ function parseJailStatus(output, jailName) {
         result.enabled = true; // If there are banned IPs, jail is enabled
         if (process.env.NODE_ENV === 'development') {
           console.log(`[JAIL PARSER] ${jailName}: Currently banned = ${currentlyBannedCount}`);
+        }
+      }
+    }
+    
+    // Parse "Total banned" - informational/historical count (optional)
+    // Format: "Total banned:\t11" or "Total banned: 11"
+    if (line.toLowerCase().includes('total banned') && !line.toLowerCase().includes('currently')) {
+      const cleaned = line.replace(/^[`|\-|\s\t]+/, '').trim();
+      const match = cleaned.match(/total\s+banned[:\s\t]+(\d+)/i);
+      if (match) {
+        totalBannedCount = parseInt(match[1], 10);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[JAIL PARSER] ${jailName}: Total banned = ${totalBannedCount}`);
         }
       }
     }
@@ -311,8 +327,12 @@ function parseJailStatus(output, jailName) {
     result.enabled = true;
   }
   
-  // Add banned count to result (for API response)
-  result.bannedCount = currentlyBannedCount;
+  // Add banned counts to result (for API response)
+  // currently_banned is the ONLY value used in UI tables
+  // total_banned is informational and optional
+  result.bannedCount = currentlyBannedCount; // Keep for backward compatibility
+  result.currentlyBanned = currentlyBannedCount;
+  result.totalBanned = totalBannedCount !== null ? totalBannedCount : undefined; // Optional
   
   result.errors = errors;
   return result;
