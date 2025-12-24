@@ -23,8 +23,12 @@ router.get('/', async (req, res, next) => {
       });
     }
 
+    console.log(`[HISTORY API] Request: jail=${jailFilter}, limit=${limit}`);
+
     // Get ban history
     const events = await getBanHistory(jailFilter, limit);
+
+    console.log(`[HISTORY API] Found ${events.length} events`);
 
     res.setHeader('X-API-Version', API_VERSION);
     res.json({
@@ -36,6 +40,7 @@ router.get('/', async (req, res, next) => {
     });
   } catch (err) {
     console.error('[HISTORY API] Error:', err);
+    console.error('[HISTORY API] Error stack:', err.stack);
     
     // Return error response (per user requirement)
     res.status(500).json({
