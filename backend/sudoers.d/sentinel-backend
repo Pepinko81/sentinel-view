@@ -50,8 +50,13 @@ Cmnd_Alias SENTINEL_SYSTEMCTL = \
 Cmnd_Alias SENTINEL_FILTER_MGMT = \
     /home/pepinko/sentinel-view/backend/scripts/create-filter-file.sh
 
+# Cmnd_Alias for reading fail2ban log file
+# Allows reading /var/log/fail2ban.log for ban history
+Cmnd_Alias SENTINEL_LOG_READ = \
+    /home/pepinko/sentinel-view/backend/scripts/read-fail2ban-log.sh
+
 # Backend user - restricted sudo access
 # Restricted to root only - cannot run as other users
 # Replace 'pepinko' with your actual backend user if different
-pepinko ALL=(root) NOPASSWD: SENTINEL_SCRIPTS, SENTINEL_FAIL2BAN_READ, SENTINEL_FAIL2BAN_CONTROL, SENTINEL_REGEX, SENTINEL_SYSTEMCTL, SENTINEL_FILTER_MGMT
+pepinko ALL=(root) NOPASSWD: SENTINEL_SCRIPTS, SENTINEL_FAIL2BAN_READ, SENTINEL_FAIL2BAN_CONTROL, SENTINEL_REGEX, SENTINEL_SYSTEMCTL, SENTINEL_FILTER_MGMT, SENTINEL_LOG_READ
 
