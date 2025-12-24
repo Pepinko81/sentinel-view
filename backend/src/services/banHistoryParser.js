@@ -86,11 +86,12 @@ async function getBanHistory(jailFilter = null, limit = 50) {
   }
 
   try {
-    // Read log file using tail to get last N lines (limit * 2 to account for filtering)
+    // Read log file using helper script to get last N lines (limit * 2 to account for filtering)
     // Use sudo to read the log file
+    const scriptPath = path.resolve(__dirname, '../scripts/read-fail2ban-log.sh');
     const { stdout, stderr } = await execFileAsync(
       SUDO_PATH,
-      ['tail', '-n', String(limit * 2), FAIL2BAN_LOG_PATH],
+      [scriptPath, String(limit * 2)],
       {
         timeout: 10000,
         maxBuffer: 5 * 1024 * 1024,
