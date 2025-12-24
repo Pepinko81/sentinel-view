@@ -7,6 +7,7 @@ const nginxRouter = require('./nginx');
 const systemRouter = require('./system');
 const backupRouter = require('./backup');
 const fail2banRouter = require('./fail2ban');
+const historyRouter = require('./history');
 
 // Mount routes
 router.use('/overview', overviewRouter);
@@ -15,6 +16,7 @@ router.use('/nginx', nginxRouter);
 router.use('/system', systemRouter);
 router.use('/backup', backupRouter);
 router.use('/fail2ban', fail2banRouter);
+router.use('/history', historyRouter);
 
 module.exports = router;
 

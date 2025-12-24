@@ -3,11 +3,14 @@ import { Shield, AlertCircle, RefreshCw, Power } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { JailTable } from "@/components/jails/JailTable";
 import { JailFilters } from "@/components/jails/JailFilters";
+import { BanHistory } from "@/components/jails/BanHistory";
+import { JailBuilder } from "@/components/jails/JailBuilder";
 import { RefreshIndicator } from "@/components/dashboard/RefreshIndicator";
 import { useJails } from "@/hooks/useJails";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -169,75 +172,94 @@ export default function Jails() {
           />
         )}
 
-        {/* Results count */}
-        {!isLoading && !isError && (
-          <div className="font-mono text-xs text-muted-foreground">
-            Showing {filteredJails.length} of {jails.length} jails
-          </div>
-        )}
+        {/* Tabs */}
+        <Tabs defaultValue="active" className="w-full">
+          <TabsList className="font-mono">
+            <TabsTrigger value="active">Active</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
+            <TabsTrigger value="builder">Jail Builder</TabsTrigger>
+          </TabsList>
 
-        {/* Jails Table */}
-        {isLoading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-12 bg-muted/50" />
-            <Skeleton className="h-64 bg-muted/50" />
-          </div>
-        ) : isError ? (
-          // Empty state when error
-          <div className="terminal-card p-6">
-            <div className="scanlines" />
-            <div className="relative z-10 text-center text-muted-foreground">
-              <p className="font-mono text-sm">Unable to load jails data</p>
-            </div>
-          </div>
-        ) : jails.length === 0 ? (
-          // Empty state when no jails
-          <div className="terminal-card p-6">
-            <div className="scanlines" />
-            <div className="relative z-10 text-center text-muted-foreground">
-              <p className="font-mono text-sm">No jails configured</p>
-            </div>
-          </div>
-        ) : filteredJails.length === 0 ? (
-          // Empty state when filters match nothing
-          <div className="terminal-card p-6">
-            <div className="scanlines" />
-            <div className="relative z-10 text-center text-muted-foreground">
-              <p className="font-mono text-sm">No jails match the current filters</p>
-            </div>
-          </div>
-        ) : categoryFilter !== "all" || searchQuery ? (
-          // Flat list when filtering
-          <JailTable
-            jails={filteredJails}
-            onToggleJail={toggleJail}
-            onUnbanIP={handleUnban}
-            isToggling={isToggling}
-          />
-        ) : (
-          // Grouped by category
-          <div className="space-y-6">
-            {Object.entries(groupedJails).map(([category, categoryJails]) => (
-              <div key={category} className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-secondary" />
-                  <h2 className="font-mono text-sm font-semibold uppercase tracking-wider text-secondary">
-                    {category}
-                  </h2>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    ({categoryJails.length})
-                  </span>
-                </div>
-                <JailTable
-                  jails={categoryJails}
-                  onToggleJail={toggleJail}
-                  onUnbanIP={handleUnban}
-                  isToggling={isToggling}
-                />
+          <TabsContent value="active" className="space-y-4 mt-4">
+            {/* Results count */}
+            {!isLoading && !isError && (
+              <div className="font-mono text-xs text-muted-foreground">
+                Showing {filteredJails.length} of {jails.length} jails
               </div>
-            ))}
-          </div>
-        )}
+            )}
+
+            {/* Jails Table */}
+            {isLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-12 bg-muted/50" />
+                <Skeleton className="h-64 bg-muted/50" />
+              </div>
+            ) : isError ? (
+              // Empty state when error
+              <div className="terminal-card p-6">
+                <div className="scanlines" />
+                <div className="relative z-10 text-center text-muted-foreground">
+                  <p className="font-mono text-sm">Unable to load jails data</p>
+                </div>
+              </div>
+            ) : jails.length === 0 ? (
+              // Empty state when no jails
+              <div className="terminal-card p-6">
+                <div className="scanlines" />
+                <div className="relative z-10 text-center text-muted-foreground">
+                  <p className="font-mono text-sm">No jails configured</p>
+                </div>
+              </div>
+            ) : filteredJails.length === 0 ? (
+              // Empty state when filters match nothing
+              <div className="terminal-card p-6">
+                <div className="scanlines" />
+                <div className="relative z-10 text-center text-muted-foreground">
+                  <p className="font-mono text-sm">No jails match the current filters</p>
+                </div>
+              </div>
+            ) : categoryFilter !== "all" || searchQuery ? (
+              // Flat list when filtering
+              <JailTable
+                jails={filteredJails}
+                onToggleJail={toggleJail}
+                onUnbanIP={handleUnban}
+                isToggling={isToggling}
+              />
+            ) : (
+              // Grouped by category
+              <div className="space-y-6">
+                {Object.entries(groupedJails).map(([category, categoryJails]) => (
+                  <div key={category} className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-secondary" />
+                      <h2 className="font-mono text-sm font-semibold uppercase tracking-wider text-secondary">
+                        {category}
+                      </h2>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        ({categoryJails.length})
+                      </span>
+                    </div>
+                    <JailTable
+                      jails={categoryJails}
+                      onToggleJail={toggleJail}
+                      onUnbanIP={handleUnban}
+                      isToggling={isToggling}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="history" className="mt-4">
+            <BanHistory />
+          </TabsContent>
+
+          <TabsContent value="builder" className="mt-4">
+            <JailBuilder />
+          </TabsContent>
+        </Tabs>
       </div>
     </MainLayout>
   );
