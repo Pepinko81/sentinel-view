@@ -4,7 +4,6 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { JailTable } from "@/components/jails/JailTable";
 import { JailFilters } from "@/components/jails/JailFilters";
 import { BanHistory } from "@/components/jails/BanHistory";
-import { JailBuilder } from "@/components/jails/JailBuilder";
 import { RefreshIndicator } from "@/components/dashboard/RefreshIndicator";
 import { useJails } from "@/hooks/useJails";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -177,7 +176,6 @@ export default function Jails() {
           <TabsList className="font-mono">
             <TabsTrigger value="active">Active</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
-            <TabsTrigger value="builder">Jail Builder</TabsTrigger>
           </TabsList>
 
           <TabsContent value="active" className="space-y-4 mt-4">
@@ -254,10 +252,6 @@ export default function Jails() {
 
           <TabsContent value="history" className="mt-4">
             <BanHistory />
-          </TabsContent>
-
-          <TabsContent value="builder" className="mt-4">
-            <JailBuilder />
           </TabsContent>
         </Tabs>
       </div>

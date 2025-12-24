@@ -1,4 +1,4 @@
-import { LayoutDashboard, Shield, Terminal } from "lucide-react";
+import { LayoutDashboard, Shield, Terminal, Wrench } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -17,6 +17,7 @@ import {
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Jails", url: "/jails", icon: Shield },
+  { title: "Jail Builder", url: "/jail-builder", icon: Wrench },
 ];
 
 export function AppSidebar() {
