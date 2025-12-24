@@ -225,3 +225,79 @@ export const restartFail2ban = async (): Promise<RestartFail2banResponse> => {
   }
 };
 
+/**
+ * Fetch ban history from fail2ban.log
+ * GET /api/history?jail=<name>&limit=50
+ */
+export interface BanHistoryEvent {
+  jail: string;
+  ip: string;
+  action: "ban" | "unban" | "restore";
+  timestamp: string;
+}
+
+export interface BanHistoryResponse {
+  success: boolean;
+  events: BanHistoryEvent[];
+  total: number;
+  jail: string | null;
+  limit: number;
+  error?: string;
+}
+
+export const fetchBanHistory = async (jail?: string, limit: number = 50): Promise<BanHistoryResponse> => {
+  try {
+    const params = new URLSearchParams();
+    if (jail) {
+      params.append('jail', jail);
+    }
+    if (limit) {
+      params.append('limit', limit.toString());
+    }
+    const queryString = params.toString();
+    const url = `/api/history${queryString ? `?${queryString}` : ''}`;
+    const response = await apiClient.get<BanHistoryResponse>(url);
+    return response;
+  } catch (error) {
+    console.error('Fetch ban history failed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Create a new fail2ban jail
+ * POST /api/jails/create
+ */
+export interface CreateJailPayload {
+  name: string;
+  filter: string;
+  logpath: string;
+  maxretry?: number;
+  findtime?: number;
+  bantime?: number;
+  action?: string;
+}
+
+export interface CreateJailResponse {
+  success: boolean;
+  jail: string;
+  enabled?: boolean;
+  message: string;
+  configFile?: string;
+  warning?: string;
+  error?: string;
+}
+
+export const createJail = async (payload: CreateJailPayload): Promise<CreateJailResponse> => {
+  try {
+    const response = await apiClient.post<CreateJailResponse>('/api/jails/create', payload);
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to create jail');
+    }
+    return response;
+  } catch (error) {
+    console.error('Create jail failed:', error);
+    throw error;
+  }
+};
+

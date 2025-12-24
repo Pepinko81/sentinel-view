@@ -163,7 +163,7 @@ export function JailTable({
                           </h4>
                           {jail.active_bans?.ips && jail.active_bans.ips.length > 0 ? (
                             <IPList
-                              ips={jail.active_bans.ips.map(ip => ({ ip, bannedAt: new Date().toISOString(), banCount: 1 }))}
+                              ips={jail.active_bans.ips.map(ip => ({ ip, bannedAt: '', banCount: 1 }))}
                               jailName={jail.name}
                               onUnban={onUnbanIP}
                             />

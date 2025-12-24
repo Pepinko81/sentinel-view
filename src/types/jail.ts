@@ -1,6 +1,6 @@
 export interface BannedIP {
   ip: string;
-  bannedAt: string;
+  bannedAt: string; // Only valid for history events; empty string for active bans (runtime state)
   banCount: number;
 }
 

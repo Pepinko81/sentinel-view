@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Copy, ExternalLink, Ban, Check } from "lucide-react";
 import { BannedIP } from "@/types/jail";
 import { Button } from "@/components/ui/button";
-import { formatDistanceToNow } from "date-fns";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,13 +49,13 @@ export function IPList({ ips, jailName, onUnban }: IPListProps) {
                 {banned.ip}
               </code>
               <span className="font-mono text-xs text-muted-foreground">
-                {formatDistanceToNow(new Date(banned.bannedAt), {
-                  addSuffix: true,
-                })}
+                Active ban (runtime)
               </span>
-              <span className="font-mono text-xs text-warning">
-                ×{banned.banCount}
-              </span>
+              {banned.banCount > 1 && (
+                <span className="font-mono text-xs text-warning">
+                  ×{banned.banCount}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1">
               <Button

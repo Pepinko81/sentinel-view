@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const fs = require('fs');
+const path = require('path');
+const { promisify } = require('util');
+const { execFile } = require('child_process');
 const { executeScript } = require('../services/scriptExecutor');
 const { runFail2banAction, verifyJailState, getGlobalFail2banStatus } = require('../services/fail2banControl');
 const { discoverConfiguredJails, getJailRuntimeState } = require('../services/jailDiscovery');
@@ -15,6 +18,15 @@ const { isValidJailName } = require('../utils/validators');
 const { API_VERSION } = require('../config/api');
 const cache = require('../services/cache');
 const config = require('../config/config');
+
+const execFileAsync = promisify(execFile);
+
+// Absolute paths
+const SUDO_PATH = process.env.SUDO_PATH || '/usr/bin/sudo';
+const FAIL2BAN_CONFIG_DIR = process.env.FAIL2BAN_CONFIG_DIR || '/etc/fail2ban';
+const FAIL2BAN_CLIENT_PATH = process.env.FAIL2BAN_CLIENT_PATH || '/usr/bin/fail2ban-client';
+const FAIL2BAN_FILTER_DIR = path.join(FAIL2BAN_CONFIG_DIR, 'filter.d');
+const FAIL2BAN_JAIL_D_DIR = path.join(FAIL2BAN_CONFIG_DIR, 'jail.d');
 
 /**
  * GET /api/jails
@@ -1003,6 +1015,206 @@ router.post('/:name/toggle', async (req, res, next) => {
     });
   } catch (err) {
     console.error(`[JAIL TOGGLE] ❌ Error toggling jail ${jailName}:`, err);
+    next(err);
+  }
+});
+
+/**
+ * POST /api/jails/create
+ * Create a new fail2ban jail configuration
+ * Payload:
+ * {
+ *   name: string (required),
+ *   filter: string (required),
+ *   logpath: string (required),
+ *   maxretry?: number (default: 3),
+ *   findtime?: number (default: 600),
+ *   bantime?: number (default: 3600),
+ *   action?: string (default: "iptables-multiport")
+ * }
+ */
+router.post('/create', async (req, res, next) => {
+  try {
+    const { name, filter, logpath, maxretry, findtime, bantime, action } = req.body;
+
+    // Validate required fields
+    if (!name || typeof name !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Jail name is required',
+      });
+    }
+
+    if (!filter || typeof filter !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Filter name is required',
+      });
+    }
+
+    if (!logpath || typeof logpath !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Log path is required',
+      });
+    }
+
+    // Validate jail name format
+    if (!isValidJailName(name)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid jail name: "${name}". Jail names must contain only alphanumeric characters, dots, dashes, and underscores.`,
+      });
+    }
+
+    console.log(`[JAIL CREATE] Creating jail: ${name}`);
+
+    // Check if jail already exists
+    const configuredJails = await discoverConfiguredJails();
+    if (configuredJails.jails && configuredJails.jails.includes(name)) {
+      return res.status(409).json({
+        success: false,
+        error: `Jail "${name}" already exists. Cannot overwrite existing jails.`,
+        details: {
+          jailName: name,
+          suggestion: 'Use a different name or modify the existing jail manually.',
+        },
+      });
+    }
+
+    // Check if config file already exists
+    const configFilePath = path.join(FAIL2BAN_JAIL_D_DIR, `${name}.conf`);
+    if (fs.existsSync(configFilePath)) {
+      return res.status(409).json({
+        success: false,
+        error: `Jail configuration file already exists: ${configFilePath}`,
+        details: {
+          jailName: name,
+          configFile: configFilePath,
+          suggestion: 'Use a different name or remove the existing file manually.',
+        },
+      });
+    }
+
+    // Validate filter exists
+    const filterPath = path.join(FAIL2BAN_FILTER_DIR, `${filter}.conf`);
+    try {
+      await execFileAsync(SUDO_PATH, ['test', '-f', filterPath], { timeout: 5000 });
+      console.log(`[JAIL CREATE] ✅ Filter file exists: ${filterPath}`);
+    } catch (err) {
+      return res.status(400).json({
+        success: false,
+        error: `Filter file does not exist: ${filterPath}`,
+        details: {
+          filterName: filter,
+          filterPath: filterPath,
+          suggestion: `Create the filter file first: /etc/fail2ban/filter.d/${filter}.conf`,
+        },
+      });
+    }
+
+    // Validate logpath exists
+    try {
+      await execFileAsync(SUDO_PATH, ['ls', '-d', logpath], { timeout: 5000 });
+      console.log(`[JAIL CREATE] ✅ Logpath exists: ${logpath}`);
+    } catch (err) {
+      return res.status(400).json({
+        success: false,
+        error: `Log path does not exist or is not accessible: ${logpath}`,
+        details: {
+          logpath: logpath,
+          suggestion: 'Verify the log path exists and is readable.',
+        },
+      });
+    }
+
+    // Prepare config content
+    const configContent = `[${name}]
+enabled = true
+filter = ${filter}
+logpath = ${logpath}
+maxretry = ${maxretry || 3}
+findtime = ${findtime || 600}
+bantime = ${bantime || 3600}
+action = ${action || 'iptables-multiport'}
+`;
+
+    // Write config file using sudo
+    // Create temp file first, then copy with sudo
+    const tempFile = path.join(__dirname, `../tmp/${name}.conf.tmp`);
+    const tempDir = path.dirname(tempFile);
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    fs.writeFileSync(tempFile, configContent, 'utf8');
+
+    try {
+      // Copy temp file to final location with sudo
+      await execFileAsync(SUDO_PATH, ['cp', tempFile, configFilePath], { timeout: 10000 });
+      // Set correct permissions
+      await execFileAsync(SUDO_PATH, ['chmod', '644', configFilePath], { timeout: 5000 });
+      console.log(`[JAIL CREATE] ✅ Config file created: ${configFilePath}`);
+    } catch (err) {
+      // Clean up temp file
+      if (fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+      throw new Error(`Failed to write config file: ${err.message}`);
+    }
+
+    // Clean up temp file
+    if (fs.existsSync(tempFile)) {
+      fs.unlinkSync(tempFile);
+    }
+
+    // Reload fail2ban to load new config
+    try {
+      console.log(`[JAIL CREATE] Reloading fail2ban...`);
+      await execFileAsync(SUDO_PATH, [FAIL2BAN_CLIENT_PATH, 'reload'], { timeout: 10000 });
+      console.log(`[JAIL CREATE] ✅ Fail2ban reloaded`);
+    } catch (err) {
+      console.error(`[JAIL CREATE] ⚠️ Failed to reload fail2ban: ${err.message}`);
+      // Config file was created, but reload failed - still return success with warning
+      return res.json({
+        success: true,
+        jail: name,
+        message: `Jail configuration created, but fail2ban reload failed. Please reload manually: sudo ${FAIL2BAN_CLIENT_PATH} reload`,
+        warning: err.message,
+        configFile: configFilePath,
+      });
+    }
+
+    // Optionally start the jail
+    try {
+      console.log(`[JAIL CREATE] Starting jail: ${name}`);
+      await execFileAsync(SUDO_PATH, [FAIL2BAN_CLIENT_PATH, 'start', name], { timeout: 10000 });
+      console.log(`[JAIL CREATE] ✅ Jail started: ${name}`);
+    } catch (err) {
+      console.warn(`[JAIL CREATE] ⚠️ Failed to start jail: ${err.message}`);
+      // Jail was created and reloaded, but start failed - still return success with warning
+      return res.json({
+        success: true,
+        jail: name,
+        enabled: false,
+        message: `Jail configuration created and reloaded, but failed to start. You can start it manually from the UI.`,
+        warning: err.message,
+        configFile: configFilePath,
+      });
+    }
+
+    // Clear cache
+    cache.clear('jails');
+
+    res.setHeader('X-API-Version', API_VERSION);
+    return res.json({
+      success: true,
+      jail: name,
+      enabled: true,
+      message: `Jail "${name}" created and started successfully`,
+      configFile: configFilePath,
+    });
+  } catch (err) {
+    console.error(`[JAIL CREATE] ❌ Error creating jail:`, err);
     next(err);
   }
 });
