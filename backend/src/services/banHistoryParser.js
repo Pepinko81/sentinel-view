@@ -20,38 +20,53 @@ function parseBanHistory(logContent, jailFilter = null, limit = 50) {
   const lines = logContent.split('\n').filter(line => line.trim());
   const events = [];
 
-  // Patterns to match:
+  // Patterns to match various fail2ban log formats:
   // 2024-01-01 12:00:00,123 fail2ban.actions: [jail-name] Ban 192.168.1.1
   // 2024-01-01 12:00:00,123 fail2ban.actions: [jail-name] Unban 192.168.1.1
   // 2024-01-01 12:00:00,123 fail2ban.actions: [jail-name] Restore Ban 192.168.1.1
+  // Also handle formats like:
+  // 2024-01-01 12:00:00,123 fail2ban.actions[1234]: [jail-name] Ban 192.168.1.1
+  // 2024-01-01 12:00:00,123 fail2ban.action: [jail-name] Ban 192.168.1.1
   
-  const actionPattern = /fail2ban\.actions:\s+\[([^\]]+)\]\s+(Ban|Unban|Restore Ban)\s+(\d+\.\d+\.\d+\.\d+)/i;
-  const timestampPattern = /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}),(\d{3})/;
+  // More flexible action pattern - handles various formats
+  const actionPattern = /fail2ban\.(?:actions?|action)(?:\[[^\]]+\])?:\s+\[([^\]]+)\]\s+(Ban|Unban|Restore\s+Ban)\s+(\d+\.\d+\.\d+\.\d+)/i;
+  // More flexible timestamp pattern - handles with/without milliseconds
+  const timestampPattern = /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})(?:,(\d{3}))?/;
+
+  let parsedCount = 0;
+  let skippedCount = 0;
 
   for (const line of lines) {
     // Extract timestamp
     const timestampMatch = line.match(timestampPattern);
-    if (!timestampMatch) continue;
+    if (!timestampMatch) {
+      skippedCount++;
+      continue;
+    }
 
     const [, date, time, milliseconds] = timestampMatch;
-    const timestampStr = `${date}T${time}.${milliseconds}Z`;
+    const timestampStr = milliseconds ? `${date}T${time}.${milliseconds}Z` : `${date}T${time}Z`;
     let timestamp;
     try {
       timestamp = new Date(timestampStr).toISOString();
     } catch (err) {
       console.warn(`[BAN HISTORY PARSER] Failed to parse timestamp: ${timestampStr}`);
+      skippedCount++;
       continue;
     }
 
     // Extract action (ban/unban/restore)
     const actionMatch = line.match(actionPattern);
-    if (!actionMatch) continue;
+    if (!actionMatch) {
+      skippedCount++;
+      continue;
+    }
 
     const [, jailName, action, ip] = actionMatch;
 
     // Normalize action
-    let normalizedAction = action.toLowerCase();
-    if (normalizedAction === 'restore ban') {
+    let normalizedAction = action.toLowerCase().trim();
+    if (normalizedAction === 'restore ban' || normalizedAction === 'restoreban') {
       normalizedAction = 'restore';
     }
 
@@ -66,6 +81,14 @@ function parseBanHistory(logContent, jailFilter = null, limit = 50) {
       action: normalizedAction,
       timestamp: timestamp,
     });
+    parsedCount++;
+  }
+
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[BAN HISTORY PARSER] Parsed ${parsedCount} events, skipped ${skippedCount} lines, total lines: ${lines.length}`);
+    if (jailFilter) {
+      console.log(`[BAN HISTORY PARSER] Filtering by jail: ${jailFilter}`);
+    }
   }
 
   // Sort by timestamp (newest first) and limit
@@ -86,13 +109,14 @@ async function getBanHistory(jailFilter = null, limit = 50) {
   }
 
   try {
-    // Read log file using helper script to get last N lines (limit * 2 to account for filtering)
-    // Use sudo to read the log file
+    // Read log file using helper script to get last N lines
+    // Use larger limit to account for filtering and ensure we get enough events
+    const readLimit = jailFilter ? limit * 10 : limit * 5; // Read more lines if filtering
     // __dirname is backend/src/services, so we need to go up two levels to reach backend/scripts
     const scriptPath = path.resolve(__dirname, '../../scripts/read-fail2ban-log.sh');
     const { stdout, stderr } = await execFileAsync(
       SUDO_PATH,
-      [scriptPath, String(limit * 2)],
+      [scriptPath, String(readLimit)],
       {
         timeout: 10000,
         maxBuffer: 5 * 1024 * 1024,
@@ -104,8 +128,20 @@ async function getBanHistory(jailFilter = null, limit = 50) {
       throw new Error(`Failed to read fail2ban log: ${stderr}`);
     }
 
+    const logContent = stdout || '';
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[BAN HISTORY PARSER] Read ${logContent.split('\n').length} lines from log file`);
+      if (logContent.length > 0) {
+        console.log(`[BAN HISTORY PARSER] First 200 chars: ${logContent.substring(0, 200)}`);
+      }
+    }
+
     // Parse the log content
-    const events = parseBanHistory(stdout || '', jailFilter, limit);
+    const events = parseBanHistory(logContent, jailFilter, limit);
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[BAN HISTORY PARSER] Returning ${events.length} events`);
+    }
 
     return events;
   } catch (err) {
