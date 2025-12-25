@@ -221,6 +221,9 @@ router.post('/create', async (req, res, next) => {
     try {
       await restartFail2ban();
       console.log(`[FILTER CREATE] ✅ Fail2ban service restarted`);
+      
+      // Wait a bit longer for fail2ban to fully start after restart
+      await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (restartErr) {
       console.error(`[FILTER CREATE] ❌ Failed to restart fail2ban: ${restartErr.message}`);
       // Filter was created, but restart failed - return warning
