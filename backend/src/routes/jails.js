@@ -1129,30 +1129,74 @@ router.post('/create', async (req, res, next) => {
     }
 
     // Validate logpath exists (use test -f for files, test -d for directories)
+    // Try direct check first (if readable without sudo)
+    let logpathExists = false;
+    let logpathWarning = null;
+    
     try {
-      // Try as file first
-      await execFileAsync(SUDO_PATH, ['test', '-f', logpath], { timeout: 5000 });
-      console.log(`[JAIL CREATE] ✅ Logpath exists (file): ${logpath}`);
-    } catch (fileErr) {
-      // If not a file, try as directory (for log rotation patterns like /var/log/nginx/*.log)
-      try {
-        const logDir = path.dirname(logpath);
-        await execFileAsync(SUDO_PATH, ['test', '-d', logDir], { timeout: 5000 });
-        console.log(`[JAIL CREATE] ✅ Logpath directory exists: ${logDir}`);
-        // Also check if it's a wildcard pattern
-        if (logpath.includes('*')) {
-          console.log(`[JAIL CREATE] ⚠️ Logpath contains wildcard pattern: ${logpath}`);
+      // Try direct file check first
+      if (fs.existsSync(logpath)) {
+        logpathExists = true;
+        console.log(`[JAIL CREATE] ✅ Logpath exists (direct check, file): ${logpath}`);
+      } else {
+        // Try with sudo
+        try {
+          await execFileAsync(SUDO_PATH, ['test', '-f', logpath], { timeout: 5000 });
+          logpathExists = true;
+          console.log(`[JAIL CREATE] ✅ Logpath exists (sudo check, file): ${logpath}`);
+        } catch (fileErr) {
+          // If not a file, try as directory (for log rotation patterns like /var/log/nginx/*.log)
+          try {
+            const logDir = path.dirname(logpath);
+            // Check directory directly first
+            if (fs.existsSync(logDir) && fs.statSync(logDir).isDirectory()) {
+              logpathExists = true;
+              logpathWarning = `Log file does not exist yet, but directory exists: ${logDir}. The log file will be created when the service starts.`;
+              console.log(`[JAIL CREATE] ⚠️ Logpath directory exists, but file not found: ${logpath}`);
+            } else {
+              // Try with sudo
+              await execFileAsync(SUDO_PATH, ['test', '-d', logDir], { timeout: 5000 });
+              logpathExists = true;
+              logpathWarning = `Log file does not exist yet, but directory exists: ${logDir}. The log file will be created when the service starts.`;
+              console.log(`[JAIL CREATE] ⚠️ Logpath directory exists (sudo), but file not found: ${logpath}`);
+            }
+            // Also check if it's a wildcard pattern
+            if (logpath.includes('*')) {
+              logpathWarning = `Logpath contains wildcard pattern: ${logpath}. Ensure the directory exists and files matching the pattern will be created.`;
+              console.log(`[JAIL CREATE] ⚠️ Logpath contains wildcard pattern: ${logpath}`);
+            }
+          } catch (dirErr) {
+            // Directory doesn't exist either - this is a real problem
+            return res.status(400).json({
+              success: false,
+              error: `Log path does not exist and directory is not accessible: ${logpath}`,
+              details: {
+                logpath: logpath,
+                directory: path.dirname(logpath),
+                suggestion: 'Verify the log path exists and is readable. For wildcard patterns, ensure the directory exists.',
+                note: 'The log file or its parent directory must exist for fail2ban to monitor it.',
+              },
+            });
+          }
         }
-      } catch (dirErr) {
-        return res.status(400).json({
-          success: false,
-          error: `Log path does not exist or is not accessible: ${logpath}`,
-          details: {
-            logpath: logpath,
-            suggestion: 'Verify the log path exists and is readable. For wildcard patterns, ensure the directory exists.',
-          },
-        });
       }
+    } catch (err) {
+      // Unexpected error during validation
+      console.error(`[JAIL CREATE] ❌ Logpath validation error: ${err.message}`);
+      return res.status(400).json({
+        success: false,
+        error: `Failed to validate log path: ${logpath}`,
+        details: {
+          logpath: logpath,
+          error: err.message,
+          suggestion: 'Verify the log path exists and has correct permissions.',
+        },
+      });
+    }
+    
+    // If we have a warning but path is valid, log it but continue
+    if (logpathWarning) {
+      console.log(`[JAIL CREATE] ⚠️ ${logpathWarning}`);
     }
 
     // Prepare config content
@@ -1239,6 +1283,7 @@ action = ${action || 'iptables-multiport'}
       enabled: true,
       message: `Jail "${name}" created and started successfully`,
       configFile: configFilePath,
+      warning: logpathWarning || undefined,
     });
   } catch (err) {
     console.error(`[JAIL CREATE] ❌ Error creating jail:`, err);
