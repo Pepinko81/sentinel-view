@@ -107,43 +107,84 @@ router.post('/create', async (req, res, next) => {
         filterContent = `[Definition]\n${filterContent}`;
       }
       
-      // Fail2ban supports multiple failregex patterns using continuation lines (indented)
-      // IMPORTANT: Only ONE "failregex =" line is allowed, but multiple patterns can be on continuation lines
-      // Find the failregex line and append pattern as continuation
+      // IMPORTANT: Fail2ban allows only ONE "failregex =" line
+      // Multiple patterns must be on continuation lines (indented)
+      // First, clean up any duplicate "failregex =" lines (keep only the first one)
       const lines = filterContent.split('\n');
-      let failregexLineIndex = -1;
+      let firstFailregexIndex = -1;
       let failregexEndIndex = -1;
+      const cleanedLines = [];
+      let inFailregexSection = false;
+      let foundFirstFailregex = false;
       
-      // Find the failregex line
       for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim().startsWith('failregex')) {
-          failregexLineIndex = i;
-          // Find where failregex section ends (next non-continuation line)
-          failregexEndIndex = i + 1;
-          while (failregexEndIndex < lines.length) {
-            const line = lines[failregexEndIndex].trim();
-            // Continuation lines are either:
-            // - Empty lines (allowed)
-            // - Lines starting with ^ or \ (regex patterns)
-            // - Lines that are indented (spaces at start)
-            if (line === '' || 
-                line.startsWith('^') || 
-                line.startsWith('\\') ||
-                /^\s+/.test(lines[failregexEndIndex])) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        
+        // Check if this is a failregex line
+        if (trimmed.startsWith('failregex')) {
+          if (!foundFirstFailregex) {
+            // First failregex line - keep it
+            firstFailregexIndex = cleanedLines.length;
+            failregexEndIndex = cleanedLines.length + 1;
+            cleanedLines.push(line);
+            inFailregexSection = true;
+            foundFirstFailregex = true;
+          } else {
+            // Duplicate failregex line - skip it, but collect its patterns
+            inFailregexSection = true;
+            // Extract pattern from this line if it has one
+            const patternMatch = trimmed.match(/failregex\s*=\s*(.+)/);
+            if (patternMatch && patternMatch[1]) {
+              // Add pattern as continuation line
+              cleanedLines.splice(failregexEndIndex, 0, '            ' + patternMatch[1].trim());
               failregexEndIndex++;
-            } else {
-              break;
             }
           }
-          break;
+          continue;
         }
+        
+        // Check if we're in failregex section (continuation lines)
+        if (inFailregexSection) {
+          if (trimmed === '' || 
+              trimmed.startsWith('^') || 
+              trimmed.startsWith('\\') ||
+              /^\s+/.test(line)) {
+            // Continuation line - keep it
+            cleanedLines.push(line);
+            failregexEndIndex++;
+            continue;
+          } else {
+            // End of failregex section
+            inFailregexSection = false;
+          }
+        }
+        
+        // Regular line - keep it
+        cleanedLines.push(line);
       }
       
-      if (failregexLineIndex >= 0) {
+      filterContent = cleanedLines.join('\n');
+      
+      // Now append new pattern
+      if (firstFailregexIndex >= 0) {
         // Append as continuation line (indented with 12 spaces)
-        // Insert before failregexEndIndex
-        lines.splice(failregexEndIndex, 0, '            ' + failregex);
-        filterContent = lines.join('\n');
+        const finalLines = filterContent.split('\n');
+        // Find end of failregex section again (after cleanup)
+        let endIndex = firstFailregexIndex + 1;
+        while (endIndex < finalLines.length) {
+          const line = finalLines[endIndex].trim();
+          if (line === '' || 
+              line.startsWith('^') || 
+              line.startsWith('\\') ||
+              /^\s+/.test(finalLines[endIndex])) {
+            endIndex++;
+          } else {
+            break;
+          }
+        }
+        finalLines.splice(endIndex, 0, '            ' + failregex);
+        filterContent = finalLines.join('\n');
       } else {
         // No existing failregex, add new one
         filterContent += `\nfailregex = ${failregex}`;
