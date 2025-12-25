@@ -50,13 +50,24 @@ Cmnd_Alias SENTINEL_SYSTEMCTL = \
 Cmnd_Alias SENTINEL_FILTER_MGMT = \
     /home/pepinko/sentinel-view/backend/scripts/create-filter-file.sh
 
+# Cmnd_Alias for jail config file management
+# Allows writing jail configuration files (jail.local or jail.d/*.conf)
+# Uses helper script for security
+Cmnd_Alias SENTINEL_JAIL_CONFIG = \
+    /home/pepinko/sentinel-view/backend/scripts/write-jail-config.sh
+
 # Cmnd_Alias for reading fail2ban log file
 # Allows reading /var/log/fail2ban.log for ban history
 Cmnd_Alias SENTINEL_LOG_READ = \
     /home/pepinko/sentinel-view/backend/scripts/read-fail2ban-log.sh
 
+# Cmnd_Alias for fail2ban-client reload
+# Allows reloading fail2ban configuration
+Cmnd_Alias SENTINEL_FAIL2BAN_RELOAD = \
+    /usr/bin/fail2ban-client reload
+
 # Backend user - restricted sudo access
 # Restricted to root only - cannot run as other users
 # Replace 'pepinko' with your actual backend user if different
-pepinko ALL=(root) NOPASSWD: SENTINEL_SCRIPTS, SENTINEL_FAIL2BAN_READ, SENTINEL_FAIL2BAN_CONTROL, SENTINEL_REGEX, SENTINEL_SYSTEMCTL, SENTINEL_FILTER_MGMT, SENTINEL_LOG_READ
+pepinko ALL=(root) NOPASSWD: SENTINEL_SCRIPTS, SENTINEL_FAIL2BAN_READ, SENTINEL_FAIL2BAN_CONTROL, SENTINEL_REGEX, SENTINEL_SYSTEMCTL, SENTINEL_FILTER_MGMT, SENTINEL_JAIL_CONFIG, SENTINEL_LOG_READ, SENTINEL_FAIL2BAN_RELOAD
 
