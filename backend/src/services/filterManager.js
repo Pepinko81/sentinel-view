@@ -70,24 +70,38 @@ async function getJailConfig(jailName) {
 function extractJailConfig(content, jailName) {
   const lines = content.split('\n');
   let inJailSection = false;
+  let inDefaultSection = false;
   const config = {};
+  const defaultConfig = {};
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     
-    // Check for jail section start
-    if (line === `[${jailName}]`) {
-      inJailSection = true;
+    // Check for DEFAULT section
+    if (line === '[DEFAULT]') {
+      inDefaultSection = true;
+      inJailSection = false;
       continue;
     }
     
-    // Check for next section (end of current jail)
-    if (inJailSection && line.startsWith('[') && line.endsWith(']')) {
-      break;
+    // Check for jail section start
+    if (line === `[${jailName}]`) {
+      inJailSection = true;
+      inDefaultSection = false;
+      continue;
+    }
+    
+    // Check for next section (end of current section)
+    if ((inJailSection || inDefaultSection) && line.startsWith('[') && line.endsWith(']')) {
+      if (inJailSection) {
+        break; // End of jail section
+      }
+      inDefaultSection = false;
+      continue;
     }
     
     // Parse configuration lines
-    if (inJailSection && line.includes('=')) {
+    if ((inJailSection || inDefaultSection) && line.includes('=') && !line.startsWith('#')) {
       const [key, ...valueParts] = line.split('=');
       const keyTrimmed = key.trim();
       let value = valueParts.join('=').trim();
@@ -97,11 +111,18 @@ function extractJailConfig(content, jailName) {
         value = value.toLowerCase() === 'true' || value === '1';
       }
       
-      config[keyTrimmed] = value;
+      if (inJailSection) {
+        config[keyTrimmed] = value;
+      } else if (inDefaultSection) {
+        defaultConfig[keyTrimmed] = value;
+      }
     }
   }
   
-  return inJailSection && Object.keys(config).length > 0 ? config : null;
+  // Merge default config with jail-specific config (jail config overrides defaults)
+  const mergedConfig = { ...defaultConfig, ...config };
+  
+  return inJailSection && Object.keys(mergedConfig).length > 0 ? mergedConfig : null;
 }
 
 /**
