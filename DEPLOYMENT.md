@@ -20,7 +20,10 @@ This is a full-control GUI wrapper for fail2ban that runs on the same machine wh
 - Node.js >= 18.0.0
 - fail2ban installed and configured
 - sudo access with NOPASSWD configured (see below)
-- better-sqlite3 system dependencies (for SQLite database access)
+- Build tools for native module compilation:
+  - `build-essential` (Ubuntu/Debian) or `Development Tools` (CentOS/RHEL)
+  - `python3-dev` (Python development headers)
+  - `make`, `g++` (C++ compiler)
 
 ## Sudoers Configuration
 
@@ -350,6 +353,40 @@ pm2 start src/index.js --name fail2ban-dashboard --env production
 - Check that `/etc/fail2ban/filter.d/` is writable via sudo
 - Verify regex syntax is correct (use `fail2ban-regex` to test)
 - Check backend logs for detailed error messages
+
+### npm install fails with "not found: make" or build errors
+
+**Problem**: Missing build tools required for native module compilation (`better-sqlite3`)
+
+**Solutions**:
+1. Install build dependencies:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get update
+   sudo apt-get install -y build-essential python3-dev
+   
+   # CentOS/RHEL
+   sudo yum groupinstall -y "Development Tools"
+   sudo yum install -y python3-devel
+   ```
+
+2. Verify tools are installed:
+   ```bash
+   make --version
+   g++ --version
+   python3 --version
+   ```
+
+3. Try rebuilding better-sqlite3:
+   ```bash
+   cd backend
+   npm install --build-from-source better-sqlite3
+   ```
+
+4. If still failing, check Node.js version compatibility:
+   ```bash
+   node --version  # Should be >= 18.0.0
+   ```
 
 ## Production Deployment
 
