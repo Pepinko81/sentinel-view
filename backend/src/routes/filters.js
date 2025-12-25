@@ -5,6 +5,9 @@ const path = require('path');
 const { promisify } = require('util');
 const { execFile } = require('child_process');
 const { restartFail2ban } = require('../services/fail2banControl');
+const { discoverConfiguredJails } = require('../services/jailDiscovery');
+const { getJailConfig } = require('../services/filterManager');
+const { runFail2banAction } = require('../services/fail2banControl');
 const { API_VERSION } = require('../config/api');
 
 const execFileAsync = promisify(execFile);
@@ -103,9 +106,33 @@ router.post('/create', async (req, res, next) => {
         filterContent = `[Definition]\n${filterContent}`;
       }
       
-      // Append new failregex (fail2ban supports multiple failregex lines)
-      // Always append new failregex line at the end
-      filterContent += `\nfailregex = ${failregex}`;
+      // Fail2ban supports multiple failregex patterns using continuation lines (indented)
+      // Find the last failregex line and append to it
+      const lines = filterContent.split('\n');
+      let lastFailregexIndex = -1;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (lines[i].trim().startsWith('failregex')) {
+          lastFailregexIndex = i;
+          break;
+        }
+      }
+      
+      if (lastFailregexIndex >= 0) {
+        // Append as continuation line (indented with spaces)
+        // Find where to insert (after last failregex or its continuations)
+        let insertIndex = lastFailregexIndex + 1;
+        while (insertIndex < lines.length && 
+               (lines[insertIndex].trim().startsWith('^') || 
+                lines[insertIndex].trim().startsWith('\\') ||
+                /^\s+/.test(lines[insertIndex]))) {
+          insertIndex++;
+        }
+        lines.splice(insertIndex, 0, '            ' + failregex);
+        filterContent = lines.join('\n');
+      } else {
+        // No existing failregex, add new one
+        filterContent += `\nfailregex = ${failregex}`;
+      }
       
       // Update ignoreregex if provided (only one ignoreregex allowed, replace if exists)
       if (ignoreregex && ignoreregex.trim()) {
@@ -206,12 +233,45 @@ router.post('/create', async (req, res, next) => {
       });
     }
 
+    // After restart, check if a jail with this filter name exists and is configured with enabled=true
+    // If so, automatically start it
+    let jailAutoStarted = false;
+    try {
+      const configuredJails = await discoverConfiguredJails();
+      const jailsList = configuredJails.jails || [];
+      
+      // Check if there's a jail with the same name as the filter
+      if (jailsList.includes(name)) {
+        console.log(`[FILTER CREATE] Found jail "${name}" with same name as filter, checking configuration...`);
+        const jailConfig = await getJailConfig(name);
+        
+        // Check if jail is configured with enabled=true
+        if (jailConfig && jailConfig.config && jailConfig.config.enabled === true) {
+          console.log(`[FILTER CREATE] Jail "${name}" is configured with enabled=true, auto-starting...`);
+          try {
+            await runFail2banAction('start', name, true); // ignoreNOK = true (idempotent)
+            jailAutoStarted = true;
+            console.log(`[FILTER CREATE] ✅ Jail "${name}" auto-started successfully`);
+          } catch (startErr) {
+            console.warn(`[FILTER CREATE] ⚠️ Failed to auto-start jail "${name}": ${startErr.message}`);
+          }
+        } else {
+          console.log(`[FILTER CREATE] Jail "${name}" is not configured with enabled=true, skipping auto-start`);
+        }
+      }
+    } catch (jailCheckErr) {
+      console.warn(`[FILTER CREATE] Could not check/start jail: ${jailCheckErr.message}`);
+    }
+
     res.setHeader('X-API-Version', API_VERSION);
     return res.json({
       success: true,
       filter: name,
       filterPath: filterPath,
-      message: `Filter "${name}" created and fail2ban restarted successfully`,
+      message: jailAutoStarted 
+        ? `Filter "${name}" created, fail2ban restarted, and jail "${name}" auto-started successfully`
+        : `Filter "${name}" created and fail2ban restarted successfully`,
+      jailAutoStarted: jailAutoStarted,
     });
   } catch (err) {
     console.error(`[FILTER CREATE] ❌ Error creating filter:`, err);
