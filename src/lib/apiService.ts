@@ -301,3 +301,35 @@ export const createJail = async (payload: CreateJailPayload): Promise<CreateJail
   }
 };
 
+/**
+ * Create a new fail2ban filter file
+ * POST /api/filters/create
+ */
+export interface CreateFilterPayload {
+  name: string;
+  failregex: string;
+  ignoreregex?: string;
+}
+
+export interface CreateFilterResponse {
+  success: boolean;
+  filter: string;
+  filterPath?: string;
+  message: string;
+  warning?: string;
+  error?: string;
+}
+
+export const createFilter = async (payload: CreateFilterPayload): Promise<CreateFilterResponse> => {
+  try {
+    const response = await apiClient.post<CreateFilterResponse>('/api/filters/create', payload);
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to create filter');
+    }
+    return response;
+  } catch (error) {
+    console.error('Create filter failed:', error);
+    throw error;
+  }
+};
+
