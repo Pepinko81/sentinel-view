@@ -107,29 +107,84 @@ router.post('/create', async (req, res, next) => {
         filterContent = `[Definition]\n${filterContent}`;
       }
       
-      // Fail2ban supports multiple failregex patterns using continuation lines (indented)
-      // Find the last failregex line and append to it
+      // IMPORTANT: Fail2ban allows only ONE "failregex =" line
+      // Multiple patterns must be on continuation lines (indented)
+      // First, clean up any duplicate "failregex =" lines (keep only the first one)
       const lines = filterContent.split('\n');
-      let lastFailregexIndex = -1;
-      for (let i = lines.length - 1; i >= 0; i--) {
-        if (lines[i].trim().startsWith('failregex')) {
-          lastFailregexIndex = i;
-          break;
+      let firstFailregexIndex = -1;
+      let failregexEndIndex = -1;
+      const cleanedLines = [];
+      let inFailregexSection = false;
+      let foundFirstFailregex = false;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        
+        // Check if this is a failregex line
+        if (trimmed.startsWith('failregex')) {
+          if (!foundFirstFailregex) {
+            // First failregex line - keep it
+            firstFailregexIndex = cleanedLines.length;
+            failregexEndIndex = cleanedLines.length + 1;
+            cleanedLines.push(line);
+            inFailregexSection = true;
+            foundFirstFailregex = true;
+          } else {
+            // Duplicate failregex line - skip it, but collect its patterns
+            inFailregexSection = true;
+            // Extract pattern from this line if it has one
+            const patternMatch = trimmed.match(/failregex\s*=\s*(.+)/);
+            if (patternMatch && patternMatch[1]) {
+              // Add pattern as continuation line
+              cleanedLines.splice(failregexEndIndex, 0, '            ' + patternMatch[1].trim());
+              failregexEndIndex++;
+            }
+          }
+          continue;
         }
+        
+        // Check if we're in failregex section (continuation lines)
+        if (inFailregexSection) {
+          if (trimmed === '' || 
+              trimmed.startsWith('^') || 
+              trimmed.startsWith('\\') ||
+              /^\s+/.test(line)) {
+            // Continuation line - keep it
+            cleanedLines.push(line);
+            failregexEndIndex++;
+            continue;
+          } else {
+            // End of failregex section
+            inFailregexSection = false;
+          }
+        }
+        
+        // Regular line - keep it
+        cleanedLines.push(line);
       }
       
-      if (lastFailregexIndex >= 0) {
-        // Append as continuation line (indented with spaces)
-        // Find where to insert (after last failregex or its continuations)
-        let insertIndex = lastFailregexIndex + 1;
-        while (insertIndex < lines.length && 
-               (lines[insertIndex].trim().startsWith('^') || 
-                lines[insertIndex].trim().startsWith('\\') ||
-                /^\s+/.test(lines[insertIndex]))) {
-          insertIndex++;
+      filterContent = cleanedLines.join('\n');
+      
+      // Now append new pattern
+      if (firstFailregexIndex >= 0) {
+        // Append as continuation line (indented with 12 spaces)
+        const finalLines = filterContent.split('\n');
+        // Find end of failregex section again (after cleanup)
+        let endIndex = firstFailregexIndex + 1;
+        while (endIndex < finalLines.length) {
+          const line = finalLines[endIndex].trim();
+          if (line === '' || 
+              line.startsWith('^') || 
+              line.startsWith('\\') ||
+              /^\s+/.test(finalLines[endIndex])) {
+            endIndex++;
+          } else {
+            break;
+          }
         }
-        lines.splice(insertIndex, 0, '            ' + failregex);
-        filterContent = lines.join('\n');
+        finalLines.splice(endIndex, 0, '            ' + failregex);
+        filterContent = finalLines.join('\n');
       } else {
         // No existing failregex, add new one
         filterContent += `\nfailregex = ${failregex}`;
@@ -217,6 +272,32 @@ router.post('/create', async (req, res, next) => {
       throw new Error(`Failed to write filter file: ${writeErr.message}`);
     }
 
+    // Validate filter syntax before restarting fail2ban
+    console.log(`[FILTER CREATE] Validating filter syntax...`);
+    try {
+      const FAIL2BAN_REGEX_PATH = process.env.FAIL2BAN_REGEX_PATH || '/usr/bin/fail2ban-regex';
+      const { stdout, stderr } = await execFileAsync(SUDO_PATH, [
+        FAIL2BAN_REGEX_PATH,
+        '--test-filter',
+        filterPath
+      ], {
+        timeout: 10000,
+        maxBuffer: 1024 * 1024,
+        encoding: 'utf8',
+      });
+      
+      const output = (stdout + stderr).toLowerCase();
+      if (output.includes('error') && !output.includes('ok')) {
+        console.warn(`[FILTER CREATE] ⚠️ Filter validation warning: ${stdout + stderr}`);
+        // Don't fail - let fail2ban handle it, but log the warning
+      } else {
+        console.log(`[FILTER CREATE] ✅ Filter syntax is valid`);
+      }
+    } catch (validateErr) {
+      console.warn(`[FILTER CREATE] ⚠️ Could not validate filter syntax: ${validateErr.message}`);
+      // Continue anyway - fail2ban will show the error if there's a problem
+    }
+
     // Restart fail2ban service (mandatory - filters are only loaded at service boot)
     console.log(`[FILTER CREATE] Restarting fail2ban service...`);
     try {
@@ -227,12 +308,24 @@ router.post('/create', async (req, res, next) => {
       await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (restartErr) {
       console.error(`[FILTER CREATE] ❌ Failed to restart fail2ban: ${restartErr.message}`);
+      
+      // Check if fail2ban is running
+      try {
+        const { stdout: statusOutput } = await execFileAsync(SUDO_PATH, ['systemctl', 'is-active', 'fail2ban'], { timeout: 5000 });
+        if (statusOutput.trim() !== 'active') {
+          console.error(`[FILTER CREATE] ❌ Fail2ban service is not active after restart attempt`);
+          console.error(`[FILTER CREATE] 💡 Check fail2ban logs: sudo journalctl -u fail2ban -n 50`);
+        }
+      } catch (statusErr) {
+        // Ignore status check errors
+      }
+      
       // Filter was created, but restart failed - return warning
       return res.json({
         success: true,
         filter: name,
         filterPath: filterPath,
-        message: `Filter "${name}" created successfully, but failed to restart fail2ban. Please restart manually: sudo systemctl restart fail2ban`,
+        message: `Filter "${name}" created successfully, but failed to restart fail2ban. Please check logs and restart manually: sudo systemctl restart fail2ban`,
         warning: restartErr.message,
       });
     }
