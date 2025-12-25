@@ -141,14 +141,26 @@ export const triggerBackup = async (): Promise<BackupResponse> => {
 
 /**
  * Unban IP from jail
- * NOTE: This endpoint may not exist yet in backend
- * For now, this is a placeholder that will fail gracefully
+ * POST /api/unban
  */
-export const unbanIP = async (jailName: string, ip: string): Promise<boolean> => {
+export interface UnbanResponse {
+  success: boolean;
+  message?: string;
+  jail?: string;
+  ip?: string;
+  error?: string;
+}
+
+export const unbanIP = async (jailName: string, ip: string): Promise<UnbanResponse> => {
   try {
-    // TODO: Implement when backend endpoint is available
-    // await apiClient.post(`/api/jails/${encodeURIComponent(jailName)}/unban`, { ip });
-    throw new Error('Unban endpoint not yet implemented in backend');
+    const response = await apiClient.post<UnbanResponse>('/api/bans/unban', {
+      jail: jailName,
+      ip: ip,
+    });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to unban IP');
+    }
+    return response;
   } catch (error) {
     console.error('Unban IP failed:', error);
     throw error;
@@ -156,34 +168,33 @@ export const unbanIP = async (jailName: string, ip: string): Promise<boolean> =>
 };
 
 /**
- * Toggle jail enabled/disabled (idempotent)
- * Uses the new toggle endpoint which handles NOK responses correctly
+ * Start a jail
+ * POST /api/jails/:name/start
  */
-export const toggleJail = async (jailName: string): Promise<boolean> => {
+export const startJail = async (jailName: string): Promise<{ success: boolean; message: string }> => {
   try {
-    type ToggleResponse = {
-      success: boolean;
-      jail?: string;
-      enabled?: boolean;
-      status?: 'ENABLED' | 'DISABLED';
-      message?: string;
-      error?: string;
-      nokIgnored?: boolean;
-    };
-
-    const response = await apiClient.post<ToggleResponse>(
-      `/api/jails/${encodeURIComponent(jailName)}/toggle`
+    const response = await apiClient.post<{ success: boolean; message: string }>(
+      `/api/jails/${encodeURIComponent(jailName)}/start`
     );
-
-    if (!response.success) {
-      // backend винаги връща error при неуспех – показваме го в UI
-      throw new Error(response.error || response.message || 'Failed to toggle jail');
-    }
-
-    // Return the new enabled status
-    return response.enabled ?? false;
+    return response;
   } catch (error) {
-    console.error('Toggle jail failed:', error);
+    console.error('Start jail failed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Stop a jail
+ * POST /api/jails/:name/stop
+ */
+export const stopJail = async (jailName: string): Promise<{ success: boolean; message: string }> => {
+  try {
+    const response = await apiClient.post<{ success: boolean; message: string }>(
+      `/api/jails/${encodeURIComponent(jailName)}/stop`
+    );
+    return response;
+  } catch (error) {
+    console.error('Stop jail failed:', error);
     throw error;
   }
 };
@@ -206,7 +217,7 @@ export const banIP = async (jailName: string, ip: string): Promise<boolean> => {
 
 /**
  * Restart fail2ban service
- * POST /api/fail2ban/restart
+ * POST /api/fail2ban/restart or POST /api/system/restart
  */
 export interface RestartFail2banResponse {
   success: boolean;
@@ -217,7 +228,7 @@ export interface RestartFail2banResponse {
 
 export const restartFail2ban = async (): Promise<RestartFail2banResponse> => {
   try {
-    const response = await apiClient.post<RestartFail2banResponse>('/api/fail2ban/restart');
+    const response = await apiClient.post<RestartFail2banResponse>('/api/system/restart');
     return response;
   } catch (error) {
     console.error('Restart fail2ban failed:', error);
@@ -226,8 +237,37 @@ export const restartFail2ban = async (): Promise<RestartFail2banResponse> => {
 };
 
 /**
+ * Fetch active bans
+ * GET /api/bans
+ */
+export interface ActiveBan {
+  jail: string;
+  ip: string;
+  timeofban: number;
+  bantime: number;
+}
+
+export interface ActiveBansResponse {
+  success: boolean;
+  bans: ActiveBan[];
+  total: number;
+  lastUpdated: string;
+  error?: string;
+}
+
+export const fetchActiveBans = async (): Promise<ActiveBansResponse> => {
+  try {
+    const response = await apiClient.get<ActiveBansResponse>('/api/bans');
+    return response;
+  } catch (error) {
+    console.error('Fetch active bans failed:', error);
+    throw error;
+  }
+};
+
+/**
  * Fetch ban history from fail2ban.log
- * GET /api/history?jail=<name>&limit=50
+ * GET /api/bans/history?jail=<name>&limit=50
  */
 export interface BanHistoryEvent {
   jail: string;
@@ -255,49 +295,28 @@ export const fetchBanHistory = async (jail?: string, limit: number = 50): Promis
       params.append('limit', limit.toString());
     }
     const queryString = params.toString();
-    const url = `/api/history${queryString ? `?${queryString}` : ''}`;
+    // Use new endpoint, fallback to old one for backward compatibility
+    const url = `/api/bans/history${queryString ? `?${queryString}` : ''}`;
     const response = await apiClient.get<BanHistoryResponse>(url);
     return response;
   } catch (error) {
-    console.error('Fetch ban history failed:', error);
-    throw error;
-  }
-};
-
-/**
- * Create a new fail2ban jail
- * POST /api/jails/create
- */
-export interface CreateJailPayload {
-  name: string;
-  filter: string;
-  logpath: string;
-  maxretry?: number;
-  findtime?: number;
-  bantime?: number;
-  action?: string;
-}
-
-export interface CreateJailResponse {
-  success: boolean;
-  jail: string;
-  enabled?: boolean;
-  message: string;
-  configFile?: string;
-  warning?: string;
-  error?: string;
-}
-
-export const createJail = async (payload: CreateJailPayload): Promise<CreateJailResponse> => {
-  try {
-    const response = await apiClient.post<CreateJailResponse>('/api/jails/create', payload);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to create jail');
+    // Fallback to old endpoint
+    try {
+      const params = new URLSearchParams();
+      if (jail) {
+        params.append('jail', jail);
+      }
+      if (limit) {
+        params.append('limit', limit.toString());
+      }
+      const queryString = params.toString();
+      const url = `/api/history${queryString ? `?${queryString}` : ''}`;
+      const response = await apiClient.get<BanHistoryResponse>(url);
+      return response;
+    } catch (fallbackError) {
+      console.error('Fetch ban history failed:', fallbackError);
+      throw fallbackError;
     }
-    return response;
-  } catch (error) {
-    console.error('Create jail failed:', error);
-    throw error;
   }
 };
 
@@ -329,6 +348,60 @@ export const createFilter = async (payload: CreateFilterPayload): Promise<Create
     return response;
   } catch (error) {
     console.error('Create filter failed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Read jail configuration
+ * GET /api/jail-config/:name
+ */
+export interface JailConfigResponse {
+  success: boolean;
+  jail: string;
+  content: string;
+  path: string;
+}
+
+export const readJailConfig = async (jailName: string): Promise<JailConfigResponse> => {
+  try {
+    const response = await apiClient.get<JailConfigResponse>(
+      `/api/jail-config/${encodeURIComponent(jailName)}`
+    );
+    return response;
+  } catch (error) {
+    console.error('Read jail config failed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Write jail configuration
+ * POST /api/jail-config/:name
+ */
+export interface WriteJailConfigPayload {
+  content: string;
+}
+
+export interface WriteJailConfigResponse {
+  success: boolean;
+  message: string;
+  path: string;
+}
+
+export const writeJailConfig = async (
+  jailName: string,
+  content: string,
+  targetPath?: string
+): Promise<WriteJailConfigResponse> => {
+  try {
+    const response = await apiClient.post<WriteJailConfigResponse>(
+      `/api/jail-config/${encodeURIComponent(jailName)}`,
+      { content, targetPath }
+    );
+    return response;
+  } catch (error) {
+    console.error('Write jail config failed:', error);
     throw error;
   }
 };

@@ -1,4 +1,4 @@
-import { LayoutDashboard, Shield, Terminal, Wrench } from "lucide-react";
+import { LayoutDashboard, Shield, Terminal, FileText, FileCode, Radio } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -17,8 +17,11 @@ import {
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Jails", url: "/jails", icon: Shield },
-  { title: "Jail Builder", url: "/jail-builder", icon: Wrench },
+  { title: "Create Filter", url: "/filters/create", icon: FileText },
+  { title: "Live Log", url: "/logs", icon: Radio },
 ];
+
+// Note: Jail Editor is accessed via /jail-editor/:name from Jails page
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -37,7 +40,7 @@ export function AppSidebar() {
                 FAIL2BAN
               </span>
               <span className="font-mono text-xs text-muted-foreground">
-                monitor v1.0
+                monitor v2.0
               </span>
             </div>
           )}

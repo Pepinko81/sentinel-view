@@ -1,28 +1,28 @@
 /**
  * Infer category from jail name
  * @param {string} jailName - Name of the jail
- * @returns {string} - Category: "ssh" | "nginx" | "http" | "system" | "other"
+ * @returns {string} - Category: "SSH" | "Nginx" | "HTTP" | "System" | "Other"
  */
 function inferCategory(jailName) {
   if (!jailName || typeof jailName !== 'string') {
-    return 'other';
+    return 'Other';
   }
   
   const name = jailName.toLowerCase();
   
   // SSH-related jails
   if (name.startsWith('sshd') || name.includes('ssh')) {
-    return 'ssh';
+    return 'SSH';
   }
   
   // Nginx-related jails
   if (name.startsWith('nginx') || name.includes('nginx')) {
-    return 'nginx';
+    return 'Nginx';
   }
   
   // Apache/HTTP-related jails
   if (name.startsWith('apache') || name.includes('http-auth') || name.includes('http')) {
-    return 'http';
+    return 'HTTP';
   }
   
   // System/mail-related jails
@@ -31,12 +31,13 @@ function inferCategory(jailName) {
     name.startsWith('dovecot') ||
     name.startsWith('recidive') ||
     name.startsWith('pam-') ||
-    name.includes('system')
+    name.includes('system') ||
+    name.includes('selinux')
   ) {
-    return 'system';
+    return 'System';
   }
   
-  return 'other';
+  return 'Other';
 }
 
 /**
@@ -47,6 +48,7 @@ function inferCategory(jailName) {
  */
 function inferSeverity(jailName, bannedCount) {
   const category = inferCategory(jailName);
+  const categoryLower = category.toLowerCase();
   
   // High severity thresholds
   const highThresholds = {
@@ -66,8 +68,8 @@ function inferSeverity(jailName, bannedCount) {
     other: 5,
   };
   
-  const highThreshold = highThresholds[category] || 20;
-  const mediumThreshold = mediumThresholds[category] || 5;
+  const highThreshold = highThresholds[categoryLower] || 20;
+  const mediumThreshold = mediumThresholds[categoryLower] || 5;
   
   if (bannedCount >= highThreshold) {
     return 'high';

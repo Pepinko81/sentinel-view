@@ -74,8 +74,16 @@ const config = {
   nginxAccessLog: process.env.NGINX_ACCESS_LOG || '/var/log/nginx/access.log',
   fail2banConfig: process.env.FAIL2BAN_CONFIG || '/etc/fail2ban',
   
+  // Fail2ban paths (auto-detect if not set)
+  fail2ban: {
+    db: process.env.F2B_DB || '/var/lib/fail2ban/fail2ban.sqlite3',
+    log: process.env.F2B_LOG || '/var/log/fail2ban.log',
+    filterDir: process.env.F2B_FILTER_DIR || '/etc/fail2ban/filter.d',
+  },
+  
   // CORS
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173', // Vite default
+  serverHost: process.env.SERVER_HOST || (nodeEnv === 'production' ? '127.0.0.1' : '0.0.0.0'),
   
   // Rate limiting
   rateLimit: {

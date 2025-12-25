@@ -177,9 +177,13 @@ class Cache {
 const cache = new Cache();
 
 // Clean expired entries every minute
-setInterval(() => {
+const cleanupInterval = setInterval(() => {
   cache.cleanExpired();
 }, 60000);
+
+// Clear interval on shutdown
+process.on('SIGTERM', () => clearInterval(cleanupInterval));
+process.on('SIGINT', () => clearInterval(cleanupInterval));
 
 module.exports = cache;
 

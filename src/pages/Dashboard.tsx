@@ -1,4 +1,4 @@
-import { Shield, ShieldAlert, ShieldCheck, ShieldOff, Activity, AlertCircle, RefreshCw } from "lucide-react";
+import { Shield, ShieldAlert, ShieldCheck, ShieldOff, Activity, AlertCircle, RefreshCw, Power } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { RefreshIndicator } from "@/components/dashboard/RefreshIndicator";
@@ -6,9 +6,20 @@ import { useJails } from "@/hooks/useJails";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function Dashboard() {
-  const { stats, lastUpdated, serverStatus, isLoading, isRefetching, isError, error, refetch } =
+  const { stats, lastUpdated, serverStatus, isLoading, isRefetching, isError, error, refetch, restartFail2ban, isRestarting } =
     useJails();
 
   return (
@@ -25,11 +36,45 @@ export default function Dashboard() {
             </p>
           </div>
           {!isLoading && (
-            <RefreshIndicator
-              lastUpdated={lastUpdated}
-              isRefetching={isRefetching}
-              onRefresh={refetch}
-            />
+            <div className="flex items-center gap-2">
+              <RefreshIndicator
+                lastUpdated={lastUpdated}
+                isRefetching={isRefetching}
+                onRefresh={refetch}
+              />
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Power className="h-4 w-4 mr-2" />
+                    Restart Fail2ban
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Restart Fail2ban?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will restart the fail2ban service. All jails with enabled=true will be started.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => restartFail2ban()}
+                      disabled={isRestarting}
+                    >
+                      {isRestarting ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          Restarting...
+                        </>
+                      ) : (
+                        "Restart"
+                      )}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           )}
         </div>
 
