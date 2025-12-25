@@ -431,6 +431,149 @@ async function ensureFilterExists(jailName) {
   };
 }
 
+/**
+ * Enable jail by setting enabled=true in jail.local or jail.d override
+ * @param {string} jailName - Jail name to enable
+ * @returns {Promise<{success: boolean, configFile: string, message: string}>}
+ */
+async function enableJailInConfig(jailName) {
+  const jailLocalPath = path.join(FAIL2BAN_CONFIG_DIR, 'jail.local');
+  const jailDir = path.join(FAIL2BAN_CONFIG_DIR, 'jail.d');
+  const jailOverrideFile = path.join(jailDir, `${jailName}.conf`);
+  
+  // Prefer jail.d/<jail-name>.conf for individual jail overrides
+  // Fallback to jail.local if jail.d doesn't exist
+  let targetFile;
+  let targetContent = '';
+  
+  if (fs.existsSync(jailDir)) {
+    targetFile = jailOverrideFile;
+    // Check if file already exists
+    if (fs.existsSync(targetFile)) {
+      try {
+        targetContent = fs.readFileSync(targetFile, 'utf8');
+      } catch (err) {
+        // File exists but can't read - will create new
+        targetContent = '';
+      }
+    }
+  } else {
+    // Use jail.local
+    targetFile = jailLocalPath;
+    if (fs.existsSync(targetFile)) {
+      try {
+        targetContent = fs.readFileSync(targetFile, 'utf8');
+      } catch (err) {
+        targetContent = '';
+      }
+    }
+  }
+  
+  // Check if jail section already exists in target file
+  const jailSectionRegex = new RegExp(`\\[${jailName}\\]`, 'g');
+  const hasJailSection = jailSectionRegex.test(targetContent);
+  
+  let newContent = '';
+  if (hasJailSection) {
+    // Update existing section - find and replace enabled line
+    const lines = targetContent.split('\n');
+    let inJailSection = false;
+    let enabledFound = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      if (line.trim() === `[${jailName}]`) {
+        inJailSection = true;
+        newContent += line + '\n';
+        continue;
+      }
+      
+      if (inJailSection && line.trim().startsWith('[') && line.trim().endsWith(']')) {
+        // Next section - add enabled if not found
+        if (!enabledFound) {
+          newContent += `enabled = true\n`;
+        }
+        inJailSection = false;
+        enabledFound = false;
+        newContent += line + '\n';
+        continue;
+      }
+      
+      if (inJailSection && line.trim().startsWith('enabled')) {
+        // Replace existing enabled line
+        newContent += `enabled = true\n`;
+        enabledFound = true;
+        continue;
+      }
+      
+      newContent += line + '\n';
+      
+      // If we're past the jail section and haven't found enabled, add it before next section
+      if (inJailSection && i === lines.length - 1 && !enabledFound) {
+        newContent += `enabled = true\n`;
+      }
+    }
+  } else {
+    // Add new jail section
+    if (targetContent && !targetContent.endsWith('\n')) {
+      targetContent += '\n';
+    }
+    newContent = targetContent + `[${jailName}]\nenabled = true\n`;
+  }
+  
+  // Write to temp file first
+  const tempFile = path.join(__dirname, `../tmp/${jailName}-enable.conf.tmp`);
+  const tempDir = path.dirname(tempFile);
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+  fs.writeFileSync(tempFile, newContent, 'utf8');
+  
+  // Copy to target location with sudo
+  const SUDO_PATH = process.env.SUDO_PATH || '/usr/bin/sudo';
+  const { execFile } = require('child_process');
+  const { promisify } = require('util');
+  const execFileAsync = promisify(execFile);
+  
+  try {
+    // Ensure jail.d directory exists
+    if (targetFile === jailOverrideFile && !fs.existsSync(jailDir)) {
+      await execFileAsync(SUDO_PATH, ['mkdir', '-p', jailDir], { timeout: 5000 });
+    }
+    
+    // Copy temp file to target
+    await execFileAsync(SUDO_PATH, ['cp', tempFile, targetFile], { timeout: 10000 });
+    
+    // Set correct permissions
+    await execFileAsync(SUDO_PATH, ['chmod', '644', targetFile], { timeout: 5000 });
+    
+    // Clean up temp file
+    try {
+      fs.unlinkSync(tempFile);
+    } catch (cleanupErr) {
+      // Ignore cleanup errors
+    }
+    
+    return {
+      success: true,
+      configFile: targetFile,
+      message: `Jail "${jailName}" enabled in ${targetFile}`,
+    };
+  } catch (err) {
+    // Clean up temp file on error
+    try {
+      if (fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+    } catch (cleanupErr) {
+      // Ignore cleanup errors
+    }
+    
+    throw new Error(`Failed to write jail config: ${err.message}`);
+  }
+}
+
 module.exports = {
   getJailConfig,
   getFilterName,
@@ -438,5 +581,6 @@ module.exports = {
   createFilterFile,
   ensureFilterExists,
   FILTER_TEMPLATES,
+  enableJailInConfig,
 };
 
