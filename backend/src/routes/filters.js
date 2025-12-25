@@ -250,26 +250,18 @@ router.post('/create', async (req, res, next) => {
         if (jailConfig) {
           console.log(`[FILTER CREATE] Jail config found in ${jailConfig.configFile}`);
           console.log(`[FILTER CREATE] Jail config: enabled=${jailConfig.config.enabled}, filter=${jailConfig.config.filter || 'N/A'}`);
-          
-          // Check if jail is configured with enabled=true (or enabled not set, which defaults to false in fail2ban)
-          // In fail2ban, if enabled is not set, the jail is disabled by default
-          const isEnabled = jailConfig.config.enabled === true || jailConfig.config.enabled === 'true';
-          
-          if (isEnabled) {
-            console.log(`[FILTER CREATE] Jail "${name}" is configured with enabled=true, auto-starting...`);
-            try {
-              await runFail2banAction('start', name, true); // ignoreNOK = true (idempotent)
-              jailAutoStarted = true;
-              console.log(`[FILTER CREATE] ✅ Jail "${name}" auto-started successfully`);
-            } catch (startErr) {
-              console.warn(`[FILTER CREATE] ⚠️ Failed to auto-start jail "${name}": ${startErr.message}`);
-            }
-          } else {
-            console.log(`[FILTER CREATE] Jail "${name}" is not configured with enabled=true (enabled=${jailConfig.config.enabled}), skipping auto-start`);
-            console.log(`[FILTER CREATE] 💡 Tip: Set 'enabled = true' in jail config to auto-start after filter creation`);
-          }
-        } else {
-          console.log(`[FILTER CREATE] ⚠️ Jail "${name}" found in configured list but config could not be read`);
+        }
+        
+        // Always auto-start jail after filter creation (regardless of enabled setting)
+        // This allows users to create filters and immediately use them
+        console.log(`[FILTER CREATE] Auto-starting jail "${name}" after filter creation...`);
+        try {
+          await runFail2banAction('start', name, true); // ignoreNOK = true (idempotent)
+          jailAutoStarted = true;
+          console.log(`[FILTER CREATE] ✅ Jail "${name}" auto-started successfully`);
+        } catch (startErr) {
+          console.warn(`[FILTER CREATE] ⚠️ Failed to auto-start jail "${name}": ${startErr.message}`);
+          // Don't fail the request - filter was created successfully
         }
       } else {
         console.log(`[FILTER CREATE] Jail "${name}" not found in configured jails list (${jailsList.length} jails)`);
