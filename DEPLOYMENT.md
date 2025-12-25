@@ -206,7 +206,26 @@ However, this requires updating the backend to use exact command paths, which is
 
 ## Installation
 
-### 1. Install Dependencies
+### 1. Install System Dependencies
+
+**Important**: `better-sqlite3` requires native compilation. Install build tools first:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install -y build-essential python3-dev
+
+# CentOS/RHEL
+sudo yum groupinstall -y "Development Tools"
+sudo yum install -y python3-devel
+
+# Verify installation
+make --version
+g++ --version
+python3 --version
+```
+
+### 2. Install Node.js Dependencies
 
 ```bash
 # Backend
@@ -217,6 +236,11 @@ npm install
 cd ../src
 npm install
 ```
+
+**Note**: If `better-sqlite3` installation fails:
+- Ensure `build-essential` and `python3-dev` are installed
+- Try: `npm install --build-from-source better-sqlite3`
+- Check Node.js version: `node --version` (should be >= 18.0.0)
 
 ### 2. Configure Environment Variables
 
