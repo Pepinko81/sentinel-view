@@ -64,49 +64,72 @@ router.post('/create', async (req, res, next) => {
 
     console.log(`[FILTER CREATE] Creating filter: ${name}`);
 
-    // Check if filter file already exists
+    // Check if filter file already exists (we'll append to it instead of erroring)
     const filterPath = path.join(FAIL2BAN_FILTER_DIR, `${name}.conf`);
-    
-    // Try direct check first
-    if (fs.existsSync(filterPath)) {
-      return res.status(409).json({
-        success: false,
-        error: 'Filter already exists',
-        details: {
-          filterName: name,
-          filterPath: filterPath,
-          suggestion: 'Use a different name or modify the existing filter manually.',
-        },
-      });
-    }
 
-    // Try with sudo if direct check didn't find it
+    // Check if filter exists and read existing content
+    let existingContent = '';
+    let hasExistingFile = false;
+    
     try {
-      await execFileAsync(SUDO_PATH, ['test', '-f', filterPath], { timeout: 5000 });
-      // File exists (checked with sudo)
-      return res.status(409).json({
-        success: false,
-        error: 'Filter already exists',
-        details: {
-          filterName: name,
-          filterPath: filterPath,
-          suggestion: 'Use a different name or modify the existing filter manually.',
-        },
-      });
-    } catch (testErr) {
-      // File doesn't exist, continue with creation
-      if (testErr.code !== 1) {
-        // Error code 1 means file doesn't exist (expected), other codes are real errors
-        throw testErr;
+      if (fs.existsSync(filterPath)) {
+        existingContent = fs.readFileSync(filterPath, 'utf8');
+        hasExistingFile = true;
+      } else {
+        // Try with sudo
+        try {
+          const { stdout } = await execFileAsync(SUDO_PATH, ['cat', filterPath], { timeout: 5000 });
+          existingContent = stdout || '';
+          hasExistingFile = true;
+        } catch (readErr) {
+          // File doesn't exist, will create new
+          hasExistingFile = false;
+        }
       }
+    } catch (readErr) {
+      // File doesn't exist or can't be read, will create new
+      hasExistingFile = false;
     }
 
     // Prepare filter file content
-    let filterContent = `[Definition]\n`;
-    filterContent += `failregex = ${failregex}\n`;
+    let filterContent = '';
     
-    if (ignoreregex && ignoreregex.trim()) {
-      filterContent += `ignoreregex = ${ignoreregex.trim()}\n`;
+    if (hasExistingFile && existingContent) {
+      // Append to existing filter file
+      filterContent = existingContent.trim();
+      
+      // Check if [Definition] section exists
+      if (!filterContent.includes('[Definition]')) {
+        filterContent = `[Definition]\n${filterContent}`;
+      }
+      
+      // Append new failregex (fail2ban supports multiple failregex lines)
+      if (filterContent.includes('failregex =')) {
+        // Add new failregex line
+        filterContent += `\nfailregex = ${failregex}`;
+      } else {
+        // Add first failregex
+        filterContent += `\nfailregex = ${failregex}`;
+      }
+      
+      // Update ignoreregex if provided
+      if (ignoreregex && ignoreregex.trim()) {
+        // Remove old ignoreregex if exists
+        filterContent = filterContent.replace(/^ignoreregex\s*=.*$/gm, '');
+        filterContent += `\nignoreregex = ${ignoreregex.trim()}`;
+      }
+      
+      console.log(`[FILTER CREATE] Appending to existing filter: ${name}`);
+    } else {
+      // Create new filter file
+      filterContent = `[Definition]\n`;
+      filterContent += `failregex = ${failregex}\n`;
+      
+      if (ignoreregex && ignoreregex.trim()) {
+        filterContent += `ignoreregex = ${ignoreregex.trim()}\n`;
+      }
+      
+      console.log(`[FILTER CREATE] Creating new filter: ${name}`);
     }
 
     // Write filter file using helper script (for security)
