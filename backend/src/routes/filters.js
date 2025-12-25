@@ -6,7 +6,7 @@ const { promisify } = require('util');
 const { execFile } = require('child_process');
 const { restartFail2ban } = require('../services/fail2banControl');
 const { discoverConfiguredJails } = require('../services/jailDiscovery');
-const { getJailConfig } = require('../services/filterManager');
+const { getJailConfig, enableJailInConfig } = require('../services/filterManager');
 const { runFail2banAction } = require('../services/fail2banControl');
 const { API_VERSION } = require('../config/api');
 
@@ -16,6 +16,7 @@ const execFileAsync = promisify(execFile);
 const SUDO_PATH = process.env.SUDO_PATH || '/usr/bin/sudo';
 const FAIL2BAN_CONFIG_DIR = process.env.FAIL2BAN_CONFIG_DIR || '/etc/fail2ban';
 const FAIL2BAN_FILTER_DIR = path.join(FAIL2BAN_CONFIG_DIR, 'filter.d');
+const FAIL2BAN_CLIENT_PATH = process.env.FAIL2BAN_CLIENT_PATH || '/usr/bin/fail2ban-client';
 
 /**
  * Validate filter name (letters, numbers, dash only)
@@ -253,6 +254,29 @@ router.post('/create', async (req, res, next) => {
         if (jailConfig) {
           console.log(`[FILTER CREATE] Jail config found in ${jailConfig.configFile}`);
           console.log(`[FILTER CREATE] Jail config: enabled=${jailConfig.config.enabled}, filter=${jailConfig.config.filter || 'N/A'}`);
+          
+          // If jail is disabled, enable it in config
+          if (jailConfig.config.enabled === false || jailConfig.config.enabled === 'false') {
+            console.log(`[FILTER CREATE] Jail "${name}" is disabled, enabling it in config...`);
+            try {
+              const enableResult = await enableJailInConfig(name);
+              console.log(`[FILTER CREATE] ✅ ${enableResult.message}`);
+              
+              // Reload fail2ban to load new config
+              console.log(`[FILTER CREATE] Reloading fail2ban to load new config...`);
+              try {
+                await execFileAsync(SUDO_PATH, [FAIL2BAN_CLIENT_PATH, 'reload'], { timeout: 10000 });
+                console.log(`[FILTER CREATE] ✅ Fail2ban reloaded`);
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second after reload
+              } catch (reloadErr) {
+                console.warn(`[FILTER CREATE] ⚠️ Failed to reload fail2ban: ${reloadErr.message}`);
+                // Continue anyway - config was updated
+              }
+            } catch (enableErr) {
+              console.warn(`[FILTER CREATE] ⚠️ Failed to enable jail in config: ${enableErr.message}`);
+              // Continue anyway - try to start jail
+            }
+          }
         }
         
         // Always auto-start jail after filter creation (regardless of enabled setting)
@@ -310,7 +334,6 @@ router.post('/create', async (req, res, next) => {
                 
                 // Check if there's an error in fail2ban logs
                 console.warn(`[FILTER CREATE] 💡 Tip: Check fail2ban logs: sudo tail -50 /var/log/fail2ban.log | grep "${name}"`);
-                console.warn(`[FILTER CREATE] 💡 Tip: Jail may need 'enabled = true' in config or may have configuration errors`);
               }
             } catch (startErr) {
               console.warn(`[FILTER CREATE] ⚠️ Failed to auto-start jail "${name}": ${startErr.message}`);
