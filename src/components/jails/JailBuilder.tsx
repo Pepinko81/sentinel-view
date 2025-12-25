@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFilter } from "@/lib/apiService";
 import { useJails } from "@/hooks/useJails";
@@ -6,16 +6,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 interface JailBuilderProps {}
 
@@ -24,6 +17,7 @@ interface FilterFormData {
   name: string;
   failregex: string;
   ignoreregex: string;
+  editMode: boolean;
 }
 
 export function JailBuilder({}: JailBuilderProps) {
@@ -35,10 +29,22 @@ export function JailBuilder({}: JailBuilderProps) {
     name: "",
     failregex: "",
     ignoreregex: "",
+    editMode: false,
   });
+  const [jailInput, setJailInput] = useState<string>("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Get unique jail names from configured jails
   const jailNames = Array.from(new Set(jails.map((j) => j.name))).sort();
+
+  // Filter jails based on input (for autocomplete)
+  const filteredJails = useMemo(() => {
+    if (!jailInput.trim()) return jailNames;
+    const searchLower = jailInput.toLowerCase();
+    return jailNames.filter((jail) =>
+      jail.toLowerCase().includes(searchLower)
+    );
+  }, [jailInput, jailNames]);
 
   const createMutation = useMutation({
     mutationFn: (data: { name: string; failregex: string; ignoreregex?: string }) =>
@@ -55,7 +61,10 @@ export function JailBuilder({}: JailBuilderProps) {
         name: "",
         failregex: "",
         ignoreregex: "",
+        editMode: false,
       });
+      setJailInput("");
+      setShowSuggestions(false);
     },
     onError: (error: Error) => {
       toast({
@@ -66,13 +75,41 @@ export function JailBuilder({}: JailBuilderProps) {
     },
   });
 
-  const handleJailChange = (jailName: string) => {
+  const handleJailInputChange = (value: string) => {
+    setJailInput(value);
+    setShowSuggestions(true);
+    // If exact match, set filter immediately
+    if (jailNames.includes(value)) {
+      setFormData((prev) => ({
+        ...prev,
+        jailName: value,
+        name: value || prev.name,
+      }));
+    } else if (value === "") {
+      setFormData((prev) => ({
+        ...prev,
+        jailName: "",
+      }));
+    }
+  };
+
+  const handleJailSelect = (jailName: string) => {
+    setJailInput(jailName);
     setFormData((prev) => ({
       ...prev,
       jailName: jailName,
-      // Auto-fill filter name based on jail name
-      name: jailName || "",
+      name: jailName || prev.name,
     }));
+    setShowSuggestions(false);
+  };
+
+  const handleClearJail = () => {
+    setJailInput("");
+    setFormData((prev) => ({
+      ...prev,
+      jailName: "",
+    }));
+    setShowSuggestions(false);
   };
 
   const handleInputChange = (field: keyof FilterFormData, value: string) => {
@@ -115,7 +152,7 @@ export function JailBuilder({}: JailBuilderProps) {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Jail Name Dropdown */}
+        {/* Jail Name Search/Select */}
         <div>
           <Label
             htmlFor="jailName"
@@ -123,20 +160,55 @@ export function JailBuilder({}: JailBuilderProps) {
           >
             Jail Name <span className="text-destructive">*</span>
           </Label>
-          <Select value={formData.jailName} onValueChange={handleJailChange}>
-            <SelectTrigger className="font-mono">
-              <SelectValue placeholder="Select a jail..." />
-            </SelectTrigger>
-            <SelectContent>
-              {jailNames.map((jailName) => (
-                <SelectItem key={jailName} value={jailName}>
-                  {jailName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="relative">
+            <Input
+              type="text"
+              value={jailInput}
+              onChange={(e) => handleJailInputChange(e.target.value)}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => {
+                // Delay to allow click on suggestion
+                setTimeout(() => setShowSuggestions(false), 200);
+              }}
+              placeholder="Type jail name to search..."
+              className="font-mono pr-8"
+            />
+            {jailInput && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                onClick={handleClearJail}
+                title="Clear"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+            {showSuggestions && filteredJails.length > 0 && (
+              <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-60 overflow-auto">
+                {filteredJails.slice(0, 20).map((jailName) => (
+                  <button
+                    key={jailName}
+                    type="button"
+                    className="w-full text-left px-3 py-2 hover:bg-muted font-mono text-sm transition-colors"
+                    onClick={() => handleJailSelect(jailName)}
+                  >
+                    {jailName}
+                  </button>
+                ))}
+                {filteredJails.length > 20 && (
+                  <div className="px-3 py-2 text-xs text-muted-foreground font-mono">
+                    ... and {filteredJails.length - 20} more
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <p className="font-mono text-xs text-muted-foreground mt-1">
-            Select the jail this filter will be used for
+            {formData.jailName
+              ? `Selected: ${formData.jailName}`
+              : "Type to search for a jail name"}
           </p>
         </div>
 
@@ -160,7 +232,7 @@ export function JailBuilder({}: JailBuilderProps) {
             title="Only letters, numbers, and dashes allowed"
           />
           <p className="font-mono text-xs text-muted-foreground mt-1">
-            Filter name (letters, numbers, and dashes only). Will create /etc/fail2ban/filter.d/&lt;name&gt;.conf
+            Filter name (letters, numbers, and dashes only). Will create or append to /etc/fail2ban/filter.d/&lt;name&gt;.conf
           </p>
         </div>
 
@@ -176,12 +248,13 @@ export function JailBuilder({}: JailBuilderProps) {
             id="failregex"
             value={formData.failregex}
             onChange={(e) => handleInputChange("failregex", e.target.value)}
-            placeholder="e.g., ^&lt;HOST&gt; -.*&quot;(GET|POST).*&quot; HTTP.* 404"
+            placeholder="e.g., limiting.*client: <HOST>"
             required
             className="font-mono min-h-[100px]"
           />
           <p className="font-mono text-xs text-muted-foreground mt-1">
             Regular expression pattern to match failed login attempts. Use &lt;HOST&gt; to capture IP address.
+            {formData.editMode && " This will be appended to existing filter file."}
           </p>
         </div>
 

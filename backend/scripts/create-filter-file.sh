@@ -19,13 +19,7 @@ if [ -z "$TEMP_FILE" ] || [ ! -f "$TEMP_FILE" ]; then
     exit 1
 fi
 
-# Check if filter file already exists
-if [ -f "$FILTER_FILE" ]; then
-    echo "Error: Filter file already exists: $FILTER_FILE" >&2
-    exit 1
-fi
-
-# Copy temp file to final location
+# Copy temp file to final location (overwrite if exists - backend handles appending)
 cp "$TEMP_FILE" "$FILTER_FILE"
 
 # Set correct permissions (644)
