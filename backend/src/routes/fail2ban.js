@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { restartFail2ban } = require('../services/fail2banControl');
+const f2b = require('../services/f2b');
 const { API_VERSION } = require('../config/api');
 const cache = require('../services/cache');
-const config = require('../config/config');
 
 /**
  * POST /api/fail2ban/restart
@@ -13,8 +12,8 @@ const config = require('../config/config');
  */
 router.post('/restart', async (req, res, next) => {
   try {
-    // Execute restart
-    const result = await restartFail2ban();
+    // Execute restart using f2b service
+    const result = await f2b.restartFail2ban();
 
     // Clear cache to force fresh data fetch after restart
     cache.clear();

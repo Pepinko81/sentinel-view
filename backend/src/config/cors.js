@@ -7,16 +7,22 @@ const config = require('./config');
 
 /**
  * Get allowed origins based on environment
- * Production: Single origin from env var
+ * Production: Auto-detect LAN access (if SERVER_HOST=0.0.0.0) or use strict origin
  * Development: Allow localhost variants
  */
 function getAllowedOrigins() {
   const corsOrigin = config.corsOrigin;
   
   if (config.nodeEnv === 'production') {
-    // Production: Single origin, no wildcards
+    // Production: Check if LAN access is enabled (SERVER_HOST=0.0.0.0)
+    if (config.serverHost === '0.0.0.0') {
+      // LAN access enabled - allow all origins
+      return true; // Allow all origins
+    }
+    
+    // Production with strict binding: Single origin, no wildcards
     if (!corsOrigin || corsOrigin === '*') {
-      throw new Error('CORS_ORIGIN must be set to a specific origin in production (no wildcards)');
+      throw new Error('CORS_ORIGIN must be set to a specific origin in production when SERVER_HOST is not 0.0.0.0');
     }
     return [corsOrigin];
   }
@@ -46,17 +52,21 @@ function getAllowedOrigins() {
 const corsOptions = {
   origin: function (origin, callback) {
     // DEVELOPMENT MODE: Allow all origins (including LAN IPs)
-    // This enables frontend access from other computers in local network
-    // Production mode will use strict allowlist (see below)
     if (config.nodeEnv !== 'production') {
       // Allow all origins in development (LAN access enabled)
       return callback(null, true);
     }
     
-    // PRODUCTION MODE: Strict origin validation
+    // PRODUCTION MODE: Check if LAN access is enabled
     const allowedOrigins = getAllowedOrigins();
     
-    // In production, require origin
+    // If getAllowedOrigins returns true, allow all origins (LAN access enabled)
+    if (allowedOrigins === true) {
+      return callback(null, true);
+    }
+    
+    // Strict origin validation (SERVER_HOST=127.0.0.1)
+    // In production with strict binding, require origin
     if (!origin) {
       return callback(new Error('CORS: Origin header required in production'));
     }

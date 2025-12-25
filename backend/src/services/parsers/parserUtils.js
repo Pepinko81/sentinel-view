@@ -192,7 +192,10 @@ function detectFail2banError(output, stderr = '') {
   
   if (lower.includes('service not running') ||
       lower.includes('service is not running') ||
-      lower.includes('not running')) {
+      lower.includes('not running') ||
+      lower.includes('is fail2ban running') ||
+      lower.includes('failed to access socket') ||
+      lower.includes('socket path')) {
     return {
       isError: true,
       errorType: 'service_down',
@@ -263,6 +266,44 @@ function extractIPs(text) {
   });
 }
 
+/**
+ * Read recent fail2ban log entries for a specific jail
+ * @param {string} jail - Jail name (optional)
+ * @param {number} lines - Number of lines to read (default: 50)
+ * @returns {Promise<string>} - Log content
+ */
+async function readFail2banLog(jail = null, lines = 50) {
+  const fs = require('fs');
+  const { execFile } = require('child_process');
+  const { promisify } = require('util');
+  const execFileAsync = promisify(execFile);
+  const config = require('../../config/config');
+  
+  const SUDO_PATH = process.env.SUDO_PATH || '/usr/bin/sudo';
+  const logPath = config.fail2ban.log;
+  
+  try {
+    // Use tail to get last N lines
+    const { stdout } = await execFileAsync(SUDO_PATH, ['tail', '-n', lines.toString(), logPath], {
+      timeout: 5000,
+      maxBuffer: 1024 * 1024,
+      encoding: 'utf8',
+    });
+    
+    if (jail) {
+      // Filter lines related to this jail
+      const jailLines = stdout.split('\n').filter(line => 
+        line.toLowerCase().includes(jail.toLowerCase())
+      );
+      return jailLines.join('\n');
+    }
+    
+    return stdout;
+  } catch (err) {
+    return `Error reading log: ${err.message}`;
+  }
+}
+
 module.exports = {
   safeParse,
   validateOutput,
@@ -271,5 +312,6 @@ module.exports = {
   extractNumber,
   detectFail2banError,
   extractIPs,
+  readFail2banLog,
 };
 

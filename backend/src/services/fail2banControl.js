@@ -202,6 +202,29 @@ async function runFail2banAction(action, jailName, ignoreNOK = false) {
     // Check if process was killed (timeout or signal)
     const wasKilled = err.killed === true || err.signal !== null;
     
+    // Check error message/stderr for fail2ban service errors
+    const errorOutput = (err.stderr || err.message || '').toString();
+    const errorCheck = detectFail2banError('', errorOutput);
+    
+    // If it's a service-down error, throw a clear error
+    if (errorCheck.isError && errorCheck.errorType === 'service_down') {
+      const serviceError = new Error('fail2ban service is not running. Please start the service first using: sudo systemctl start fail2ban');
+      serviceError.errorType = 'service_down';
+      serviceError.code = err.code;
+      
+      appendAuditLog({
+        jail: jailName,
+        action,
+        step: 'after_exec',
+        command,
+        args,
+        result: 'error',
+        error: serviceError.message,
+        errorType: 'service_down',
+      });
+      throw serviceError;
+    }
+    
     // Check if it's a NOK in the error message
     const isNOK = (err.message || '').toLowerCase().includes('nok');
     

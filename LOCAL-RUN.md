@@ -171,7 +171,7 @@ curl http://localhost:3001/health
   "status": "ok",
   "timestamp": "2024-01-01T12:00:00.000Z",
   "uptime": 10,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "dependencies": {
     "fail2ban": "available",
     "scripts": "accessible",
@@ -712,6 +712,6 @@ If you encounter issues not covered here:
 
 ---
 
-**Last Updated:** 2024-01-01  
-**Version:** 1.0.0
+**Last Updated:** 2024-12-26  
+**Version:** 2.0.0
 

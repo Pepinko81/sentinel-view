@@ -1,5 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchJails, unbanIP, toggleJail, banIP, restartFail2ban, calculateStats } from "@/lib/apiService";
+import { 
+  fetchJails, 
+  unbanIP, 
+  startJail,
+  stopJail,
+  banIP, 
+  restartFail2ban, 
+  calculateStats,
+  createFilter,
+  fetchBanHistory,
+  CreateFilterPayload,
+} from "@/lib/apiService";
 import { useToast } from "@/hooks/use-toast";
 
 const REFRESH_INTERVAL = 30000; // 30 seconds
@@ -22,11 +33,12 @@ export const useJails = () => {
   const unbanMutation = useMutation({
     mutationFn: ({ jailName, ip }: { jailName: string; ip: string }) =>
       unbanIP(jailName, ip),
-    onSuccess: (_, { ip }) => {
+    onSuccess: (response, { ip }) => {
       queryClient.invalidateQueries({ queryKey: ["jails"] });
+      queryClient.invalidateQueries({ queryKey: ["banHistory"] });
       toast({
         title: "IP Unbanned",
-        description: `Successfully unbanned ${ip}`,
+        description: response.message || `Successfully unbanned ${ip}`,
       });
     },
     onError: (error: Error) => {
@@ -38,19 +50,55 @@ export const useJails = () => {
     },
   });
 
-  const toggleMutation = useMutation({
-    mutationFn: (jailName: string) => toggleJail(jailName),
-    onSuccess: (_, jailName) => {
+  const createFilterMutation = useMutation({
+    mutationFn: (payload: CreateFilterPayload) => createFilter(payload),
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["jails"] });
       toast({
-        title: "Jail Updated",
-        description: `${jailName} status changed`,
+        title: "Filter Created",
+        description: response.message || "Filter created successfully",
       });
     },
     onError: (error: Error) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to toggle jail",
+        description: error.message || "Failed to create filter",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const startJailMutation = useMutation({
+    mutationFn: (jailName: string) => startJail(jailName),
+    onSuccess: (response, jailName) => {
+      queryClient.invalidateQueries({ queryKey: ["jails"] });
+      toast({
+        title: "Jail Started",
+        description: response.message || `${jailName} started successfully`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start jail",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const stopJailMutation = useMutation({
+    mutationFn: (jailName: string) => stopJail(jailName),
+    onSuccess: (response, jailName) => {
+      queryClient.invalidateQueries({ queryKey: ["jails"] });
+      toast({
+        title: "Jail Stopped",
+        description: response.message || `${jailName} stopped successfully`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to stop jail",
         variant: "destructive",
       });
     },
@@ -94,6 +142,16 @@ export const useJails = () => {
     },
   });
 
+  // Ban history query
+  const banHistoryQuery = useQuery({
+    queryKey: ["banHistory"],
+    queryFn: () => fetchBanHistory(),
+    refetchInterval: REFRESH_INTERVAL,
+    staleTime: REFRESH_INTERVAL - 5000,
+    retry: 2,
+    retryDelay: 1000,
+  });
+
   return {
     jails: query.data?.jails ?? [],
     lastUpdated: query.data?.lastUpdated ?? null,
@@ -105,11 +163,16 @@ export const useJails = () => {
     error: query.error,
     refetch: query.refetch,
     unbanIP: unbanMutation.mutate,
-    toggleJail: toggleMutation.mutate,
+    startJail: startJailMutation.mutate,
+    stopJail: stopJailMutation.mutate,
     banIP: banMutation.mutate,
     restartFail2ban: restartMutation.mutate,
+    createFilter: createFilterMutation.mutate,
+    banHistory: banHistoryQuery.data?.events ?? [],
     isUnbanning: unbanMutation.isPending,
-    isToggling: toggleMutation.isPending,
+    isStarting: startJailMutation.isPending,
+    isStopping: stopJailMutation.isPending,
     isRestarting: restartMutation.isPending,
+    isCreatingFilter: createFilterMutation.isPending,
   };
 };

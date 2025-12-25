@@ -1,5 +1,6 @@
 import { useState, Fragment } from "react";
-import { ChevronDown, ChevronRight, Power, PowerOff } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ChevronDown, ChevronRight, PowerOff, Power, FileCode } from "lucide-react";
 import { Jail } from "@/types/jail";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,17 +9,22 @@ import { cn } from "@/lib/utils";
 
 interface JailTableProps {
   jails: Jail[];
-  onToggleJail: (jailName: string) => void;
+  onStartJail: (jailName: string) => void;
+  onStopJail: (jailName: string) => void;
   onUnbanIP: (jailName: string, ip: string) => void;
-  isToggling?: boolean;
+  isStarting?: boolean;
+  isStopping?: boolean;
 }
 
 export function JailTable({
   jails,
-  onToggleJail,
+  onStartJail,
+  onStopJail,
   onUnbanIP,
-  isToggling,
+  isStarting,
+  isStopping,
 }: JailTableProps) {
+  const navigate = useNavigate();
   const [expandedJails, setExpandedJails] = useState<Set<string>>(new Set());
 
   const toggleExpand = (jailName: string) => {
@@ -131,25 +137,41 @@ export function JailTable({
                     </span>
                   </td>
                   <td className="p-3 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onToggleJail(jail.name)}
-                      disabled={isToggling}
-                      className="font-mono text-xs"
-                    >
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate(`/jail-editor/${jail.name}`)}
+                        className="font-mono text-xs"
+                        title="Edit jail configuration"
+                      >
+                        <FileCode className="mr-1 h-3 w-3" />
+                        Edit
+                      </Button>
                       {jail.enabled ? (
-                        <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onStopJail(jail.name)}
+                          disabled={isStopping}
+                          className="font-mono text-xs"
+                        >
                           <PowerOff className="mr-1 h-3 w-3" />
-                          Disable
-                        </>
+                          Stop
+                        </Button>
                       ) : (
-                        <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onStartJail(jail.name)}
+                          disabled={isStarting}
+                          className="font-mono text-xs"
+                        >
                           <Power className="mr-1 h-3 w-3" />
-                          Enable
-                        </>
+                          Start
+                        </Button>
                       )}
-                    </Button>
+                    </div>
                   </td>
                 </tr>
                 {isExpanded && (jail.active_bans?.count ?? jail.currently_banned ?? 0) > 0 && (

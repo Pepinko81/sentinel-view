@@ -4,6 +4,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { JailTable } from "@/components/jails/JailTable";
 import { JailFilters } from "@/components/jails/JailFilters";
 import { BanHistory } from "@/components/jails/BanHistory";
+import { FilterCreator } from "@/components/jails/FilterCreator";
 import { RefreshIndicator } from "@/components/dashboard/RefreshIndicator";
 import { useJails } from "@/hooks/useJails";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,9 +34,11 @@ export default function Jails() {
     error,
     refetch,
     unbanIP,
-    toggleJail,
+    startJail,
+    stopJail,
     restartFail2ban,
-    isToggling,
+    isStarting,
+    isStopping,
     isRestarting,
   } = useJails();
 
@@ -220,9 +223,11 @@ export default function Jails() {
               // Flat list when filtering
               <JailTable
                 jails={filteredJails}
-                onToggleJail={toggleJail}
+                onStartJail={startJail}
+                onStopJail={stopJail}
                 onUnbanIP={handleUnban}
-                isToggling={isToggling}
+                isStarting={isStarting}
+                isStopping={isStopping}
               />
             ) : (
               // Grouped by category
@@ -240,9 +245,11 @@ export default function Jails() {
                     </div>
                     <JailTable
                       jails={categoryJails}
-                      onToggleJail={toggleJail}
+                      onStartJail={startJail}
+                      onStopJail={stopJail}
                       onUnbanIP={handleUnban}
-                      isToggling={isToggling}
+                      isStarting={isStarting}
+                      isStopping={isStopping}
                     />
                   </div>
                 ))}

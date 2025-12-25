@@ -44,6 +44,8 @@ function serializeBannedIP(ip, options = {}) {
  * @returns {object} - Normalized Jail object matching frontend schema
  */
 function serializeJail(jail) {
+  const { inferCategory } = require('../../utils/jailClassifier');
+  
   if (!jail || typeof jail !== 'object') {
     return {
       name: '',
@@ -100,7 +102,8 @@ function serializeJail(jail) {
     // Backward compatibility aliases
     banned_count: currentlyBanned, // Deprecated: use currently_banned
     // Optional fields - always include, use null if not available
-    category: jail.category || null,
+    // Infer category from jail name if not provided
+    category: jail.category || (jail.name ? inferCategory(jail.name) : null) || null,
     filter: jail.filter || jail.name || null,
     maxRetry: typeof jail.maxRetry === 'number' ? jail.maxRetry : null,
     banTime: typeof jail.banTime === 'number' ? jail.banTime : null,
