@@ -259,22 +259,36 @@ router.post('/create', async (req, res, next) => {
         // This allows users to create filters and immediately use them
         console.log(`[FILTER CREATE] Auto-starting jail "${name}" after filter creation...`);
         try {
-          await runFail2banAction('start', name, true); // ignoreNOK = true (idempotent)
-          
-          // Verify jail is actually started by checking active jails list
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second for jail to start
-          const { getGlobalFail2banStatus } = require('../services/fail2banControl');
-          const globalStatus = await getGlobalFail2banStatus();
-          const activeJails = globalStatus.jails || [];
-          
-          if (activeJails.includes(name)) {
-            jailAutoStarted = true;
-            console.log(`[FILTER CREATE] ✅ Jail "${name}" auto-started and verified as active`);
-          } else {
-            console.warn(`[FILTER CREATE] ⚠️ Jail "${name}" start command executed but jail is not in active list`);
-            console.warn(`[FILTER CREATE] Active jails: ${activeJails.join(', ')}`);
-            // Check if there's an error in fail2ban logs
-            console.warn(`[FILTER CREATE] 💡 Tip: Check fail2ban logs: sudo tail -50 /var/log/fail2ban.log | grep "${name}"`);
+          // First verify fail2ban is running
+          try {
+            const { stdout: statusOutput } = await execFileAsync(SUDO_PATH, ['systemctl', 'is-active', 'fail2ban'], { timeout: 5000 });
+            if (statusOutput.trim() !== 'active') {
+              console.warn(`[FILTER CREATE] ⚠️ Fail2ban service is not active (status: ${statusOutput.trim()}), cannot start jail`);
+              console.warn(`[FILTER CREATE] 💡 Tip: Start fail2ban service: sudo systemctl start fail2ban`);
+              // Don't fail the request - filter was created successfully
+            } else {
+              await runFail2banAction('start', name, true); // ignoreNOK = true (idempotent)
+              
+              // Verify jail is actually started by checking active jails list
+              await new Promise(resolve => setTimeout(resolve, 1500)); // Wait 1.5 seconds for jail to start
+              const { getGlobalFail2banStatus } = require('../services/fail2banControl');
+              const globalStatus = await getGlobalFail2banStatus();
+              const activeJails = globalStatus.jails || [];
+              
+              if (activeJails.includes(name)) {
+                jailAutoStarted = true;
+                console.log(`[FILTER CREATE] ✅ Jail "${name}" auto-started and verified as active`);
+              } else {
+                console.warn(`[FILTER CREATE] ⚠️ Jail "${name}" start command executed but jail is not in active list`);
+                console.warn(`[FILTER CREATE] Active jails: ${activeJails.join(', ')}`);
+                // Check if there's an error in fail2ban logs
+                console.warn(`[FILTER CREATE] 💡 Tip: Check fail2ban logs: sudo tail -50 /var/log/fail2ban.log | grep "${name}"`);
+              }
+            }
+          } catch (statusErr) {
+            console.warn(`[FILTER CREATE] ⚠️ Could not check fail2ban status: ${statusErr.message}`);
+            // Try to start jail anyway
+            await runFail2banAction('start', name, true);
           }
         } catch (startErr) {
           console.warn(`[FILTER CREATE] ⚠️ Failed to auto-start jail "${name}": ${startErr.message}`);
