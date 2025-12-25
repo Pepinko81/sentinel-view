@@ -260,17 +260,35 @@ router.post('/create', async (req, res, next) => {
         console.log(`[FILTER CREATE] Auto-starting jail "${name}" after filter creation...`);
         try {
           // First verify fail2ban is running
+          let fail2banActive = false;
           try {
             const { stdout: statusOutput } = await execFileAsync(SUDO_PATH, ['systemctl', 'is-active', 'fail2ban'], { timeout: 5000 });
-            if (statusOutput.trim() !== 'active') {
+            fail2banActive = statusOutput.trim() === 'active';
+            if (!fail2banActive) {
               console.warn(`[FILTER CREATE] ⚠️ Fail2ban service is not active (status: ${statusOutput.trim()}), cannot start jail`);
               console.warn(`[FILTER CREATE] 💡 Tip: Start fail2ban service: sudo systemctl start fail2ban`);
-              // Don't fail the request - filter was created successfully
             } else {
-              await runFail2banAction('start', name, true); // ignoreNOK = true (idempotent)
+              console.log(`[FILTER CREATE] ✅ Fail2ban service is active`);
+            }
+          } catch (statusErr) {
+            console.warn(`[FILTER CREATE] ⚠️ Could not check fail2ban status: ${statusErr.message}`);
+            // Assume fail2ban is running and try to start jail anyway
+            fail2banActive = true;
+          }
+          
+          if (fail2banActive) {
+            // Try to start jail
+            try {
+              const startResult = await runFail2banAction('start', name, true); // ignoreNOK = true (idempotent)
+              
+              if (startResult.nok) {
+                console.warn(`[FILTER CREATE] ⚠️ Jail start returned NOK - jail may not have started`);
+                console.warn(`[FILTER CREATE] stdout: ${startResult.stdout || '(empty)'}`);
+                console.warn(`[FILTER CREATE] stderr: ${startResult.stderr || '(empty)'}`);
+              }
               
               // Verify jail is actually started by checking active jails list
-              await new Promise(resolve => setTimeout(resolve, 1500)); // Wait 1.5 seconds for jail to start
+              await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds for jail to start
               const { getGlobalFail2banStatus } = require('../services/fail2banControl');
               const globalStatus = await getGlobalFail2banStatus();
               const activeJails = globalStatus.jails || [];
@@ -281,17 +299,26 @@ router.post('/create', async (req, res, next) => {
               } else {
                 console.warn(`[FILTER CREATE] ⚠️ Jail "${name}" start command executed but jail is not in active list`);
                 console.warn(`[FILTER CREATE] Active jails: ${activeJails.join(', ')}`);
+                
+                // Try to get more info about why jail didn't start
+                try {
+                  const { stdout: jailStatus } = await execFileAsync(SUDO_PATH, [FAIL2BAN_CLIENT_PATH, 'status', name], { timeout: 5000 });
+                  console.warn(`[FILTER CREATE] Jail status output: ${jailStatus.substring(0, 200)}`);
+                } catch (statusErr) {
+                  console.warn(`[FILTER CREATE] Could not get jail status: ${statusErr.message}`);
+                }
+                
                 // Check if there's an error in fail2ban logs
                 console.warn(`[FILTER CREATE] 💡 Tip: Check fail2ban logs: sudo tail -50 /var/log/fail2ban.log | grep "${name}"`);
+                console.warn(`[FILTER CREATE] 💡 Tip: Jail may need 'enabled = true' in config or may have configuration errors`);
               }
+            } catch (startErr) {
+              console.warn(`[FILTER CREATE] ⚠️ Failed to auto-start jail "${name}": ${startErr.message}`);
+              // Don't fail the request - filter was created successfully
             }
-          } catch (statusErr) {
-            console.warn(`[FILTER CREATE] ⚠️ Could not check fail2ban status: ${statusErr.message}`);
-            // Try to start jail anyway
-            await runFail2banAction('start', name, true);
           }
-        } catch (startErr) {
-          console.warn(`[FILTER CREATE] ⚠️ Failed to auto-start jail "${name}": ${startErr.message}`);
+        } catch (err) {
+          console.warn(`[FILTER CREATE] ⚠️ Error during jail auto-start process: ${err.message}`);
           // Don't fail the request - filter was created successfully
         }
       } else {
