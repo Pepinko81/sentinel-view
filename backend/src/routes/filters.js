@@ -272,6 +272,32 @@ router.post('/create', async (req, res, next) => {
       throw new Error(`Failed to write filter file: ${writeErr.message}`);
     }
 
+    // Validate filter syntax before restarting fail2ban
+    console.log(`[FILTER CREATE] Validating filter syntax...`);
+    try {
+      const FAIL2BAN_REGEX_PATH = process.env.FAIL2BAN_REGEX_PATH || '/usr/bin/fail2ban-regex';
+      const { stdout, stderr } = await execFileAsync(SUDO_PATH, [
+        FAIL2BAN_REGEX_PATH,
+        '--test-filter',
+        filterPath
+      ], {
+        timeout: 10000,
+        maxBuffer: 1024 * 1024,
+        encoding: 'utf8',
+      });
+      
+      const output = (stdout + stderr).toLowerCase();
+      if (output.includes('error') && !output.includes('ok')) {
+        console.warn(`[FILTER CREATE] ⚠️ Filter validation warning: ${stdout + stderr}`);
+        // Don't fail - let fail2ban handle it, but log the warning
+      } else {
+        console.log(`[FILTER CREATE] ✅ Filter syntax is valid`);
+      }
+    } catch (validateErr) {
+      console.warn(`[FILTER CREATE] ⚠️ Could not validate filter syntax: ${validateErr.message}`);
+      // Continue anyway - fail2ban will show the error if there's a problem
+    }
+
     // Restart fail2ban service (mandatory - filters are only loaded at service boot)
     console.log(`[FILTER CREATE] Restarting fail2ban service...`);
     try {
@@ -282,12 +308,24 @@ router.post('/create', async (req, res, next) => {
       await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (restartErr) {
       console.error(`[FILTER CREATE] ❌ Failed to restart fail2ban: ${restartErr.message}`);
+      
+      // Check if fail2ban is running
+      try {
+        const { stdout: statusOutput } = await execFileAsync(SUDO_PATH, ['systemctl', 'is-active', 'fail2ban'], { timeout: 5000 });
+        if (statusOutput.trim() !== 'active') {
+          console.error(`[FILTER CREATE] ❌ Fail2ban service is not active after restart attempt`);
+          console.error(`[FILTER CREATE] 💡 Check fail2ban logs: sudo journalctl -u fail2ban -n 50`);
+        }
+      } catch (statusErr) {
+        // Ignore status check errors
+      }
+      
       // Filter was created, but restart failed - return warning
       return res.json({
         success: true,
         filter: name,
         filterPath: filterPath,
-        message: `Filter "${name}" created successfully, but failed to restart fail2ban. Please restart manually: sudo systemctl restart fail2ban`,
+        message: `Filter "${name}" created successfully, but failed to restart fail2ban. Please check logs and restart manually: sudo systemctl restart fail2ban`,
         warning: restartErr.message,
       });
     }
