@@ -108,27 +108,41 @@ router.post('/create', async (req, res, next) => {
       }
       
       // Fail2ban supports multiple failregex patterns using continuation lines (indented)
-      // Find the last failregex line and append to it
+      // IMPORTANT: Only ONE "failregex =" line is allowed, but multiple patterns can be on continuation lines
+      // Find the failregex line and append pattern as continuation
       const lines = filterContent.split('\n');
-      let lastFailregexIndex = -1;
-      for (let i = lines.length - 1; i >= 0; i--) {
+      let failregexLineIndex = -1;
+      let failregexEndIndex = -1;
+      
+      // Find the failregex line
+      for (let i = 0; i < lines.length; i++) {
         if (lines[i].trim().startsWith('failregex')) {
-          lastFailregexIndex = i;
+          failregexLineIndex = i;
+          // Find where failregex section ends (next non-continuation line)
+          failregexEndIndex = i + 1;
+          while (failregexEndIndex < lines.length) {
+            const line = lines[failregexEndIndex].trim();
+            // Continuation lines are either:
+            // - Empty lines (allowed)
+            // - Lines starting with ^ or \ (regex patterns)
+            // - Lines that are indented (spaces at start)
+            if (line === '' || 
+                line.startsWith('^') || 
+                line.startsWith('\\') ||
+                /^\s+/.test(lines[failregexEndIndex])) {
+              failregexEndIndex++;
+            } else {
+              break;
+            }
+          }
           break;
         }
       }
       
-      if (lastFailregexIndex >= 0) {
-        // Append as continuation line (indented with spaces)
-        // Find where to insert (after last failregex or its continuations)
-        let insertIndex = lastFailregexIndex + 1;
-        while (insertIndex < lines.length && 
-               (lines[insertIndex].trim().startsWith('^') || 
-                lines[insertIndex].trim().startsWith('\\') ||
-                /^\s+/.test(lines[insertIndex]))) {
-          insertIndex++;
-        }
-        lines.splice(insertIndex, 0, '            ' + failregex);
+      if (failregexLineIndex >= 0) {
+        // Append as continuation line (indented with 12 spaces)
+        // Insert before failregexEndIndex
+        lines.splice(failregexEndIndex, 0, '            ' + failregex);
         filterContent = lines.join('\n');
       } else {
         // No existing failregex, add new one
