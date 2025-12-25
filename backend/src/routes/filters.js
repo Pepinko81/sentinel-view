@@ -240,27 +240,43 @@ router.post('/create', async (req, res, next) => {
       const configuredJails = await discoverConfiguredJails();
       const jailsList = configuredJails.jails || [];
       
+      console.log(`[FILTER CREATE] Checking for jail with name "${name}" in ${jailsList.length} configured jails...`);
+      
       // Check if there's a jail with the same name as the filter
       if (jailsList.includes(name)) {
-        console.log(`[FILTER CREATE] Found jail "${name}" with same name as filter, checking configuration...`);
+        console.log(`[FILTER CREATE] ✅ Found jail "${name}" in configured jails, checking configuration...`);
         const jailConfig = await getJailConfig(name);
         
-        // Check if jail is configured with enabled=true
-        if (jailConfig && jailConfig.config && jailConfig.config.enabled === true) {
-          console.log(`[FILTER CREATE] Jail "${name}" is configured with enabled=true, auto-starting...`);
-          try {
-            await runFail2banAction('start', name, true); // ignoreNOK = true (idempotent)
-            jailAutoStarted = true;
-            console.log(`[FILTER CREATE] ✅ Jail "${name}" auto-started successfully`);
-          } catch (startErr) {
-            console.warn(`[FILTER CREATE] ⚠️ Failed to auto-start jail "${name}": ${startErr.message}`);
+        if (jailConfig) {
+          console.log(`[FILTER CREATE] Jail config found in ${jailConfig.configFile}`);
+          console.log(`[FILTER CREATE] Jail config: enabled=${jailConfig.config.enabled}, filter=${jailConfig.config.filter || 'N/A'}`);
+          
+          // Check if jail is configured with enabled=true (or enabled not set, which defaults to false in fail2ban)
+          // In fail2ban, if enabled is not set, the jail is disabled by default
+          const isEnabled = jailConfig.config.enabled === true || jailConfig.config.enabled === 'true';
+          
+          if (isEnabled) {
+            console.log(`[FILTER CREATE] Jail "${name}" is configured with enabled=true, auto-starting...`);
+            try {
+              await runFail2banAction('start', name, true); // ignoreNOK = true (idempotent)
+              jailAutoStarted = true;
+              console.log(`[FILTER CREATE] ✅ Jail "${name}" auto-started successfully`);
+            } catch (startErr) {
+              console.warn(`[FILTER CREATE] ⚠️ Failed to auto-start jail "${name}": ${startErr.message}`);
+            }
+          } else {
+            console.log(`[FILTER CREATE] Jail "${name}" is not configured with enabled=true (enabled=${jailConfig.config.enabled}), skipping auto-start`);
+            console.log(`[FILTER CREATE] 💡 Tip: Set 'enabled = true' in jail config to auto-start after filter creation`);
           }
         } else {
-          console.log(`[FILTER CREATE] Jail "${name}" is not configured with enabled=true, skipping auto-start`);
+          console.log(`[FILTER CREATE] ⚠️ Jail "${name}" found in configured list but config could not be read`);
         }
+      } else {
+        console.log(`[FILTER CREATE] Jail "${name}" not found in configured jails list (${jailsList.length} jails)`);
       }
     } catch (jailCheckErr) {
       console.warn(`[FILTER CREATE] Could not check/start jail: ${jailCheckErr.message}`);
+      console.warn(`[FILTER CREATE] Error stack:`, jailCheckErr.stack);
     }
 
     res.setHeader('X-API-Version', API_VERSION);
