@@ -61,7 +61,10 @@ export function JailBuilder({}: JailBuilderProps) {
         name: "",
         failregex: "",
         ignoreregex: "",
+        editMode: false,
       });
+      setJailInput("");
+      setShowSuggestions(false);
     },
     onError: (error: Error) => {
       toast({
