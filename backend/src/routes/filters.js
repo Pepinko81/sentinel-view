@@ -104,18 +104,14 @@ router.post('/create', async (req, res, next) => {
       }
       
       // Append new failregex (fail2ban supports multiple failregex lines)
-      if (filterContent.includes('failregex =')) {
-        // Add new failregex line
-        filterContent += `\nfailregex = ${failregex}`;
-      } else {
-        // Add first failregex
-        filterContent += `\nfailregex = ${failregex}`;
-      }
+      // Always append new failregex line at the end
+      filterContent += `\nfailregex = ${failregex}`;
       
-      // Update ignoreregex if provided
+      // Update ignoreregex if provided (only one ignoreregex allowed, replace if exists)
       if (ignoreregex && ignoreregex.trim()) {
-        // Remove old ignoreregex if exists
+        // Remove all existing ignoreregex lines
         filterContent = filterContent.replace(/^ignoreregex\s*=.*$/gm, '');
+        // Add new ignoreregex at the end
         filterContent += `\nignoreregex = ${ignoreregex.trim()}`;
       }
       
