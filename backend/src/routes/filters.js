@@ -109,40 +109,64 @@ router.post('/create', async (req, res, next) => {
       filterContent += `ignoreregex = ${ignoreregex.trim()}\n`;
     }
 
-    // Write filter file using sudo
-    // Create temp file first, then copy with sudo
+    // Write filter file using helper script (for security)
+    const scriptPath = path.resolve(__dirname, '../../scripts/create-filter-file.sh');
+    
+    // Create temp file with filter content
     const tempFile = path.join(__dirname, `../tmp/${name}.conf.tmp`);
     const tempDir = path.dirname(tempFile);
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
     fs.writeFileSync(tempFile, filterContent, 'utf8');
-
+    
     try {
-      // Copy temp file to final location with sudo
-      await execFileAsync(SUDO_PATH, ['cp', tempFile, filterPath], { timeout: 10000 });
+      // Pass temp file path to script
+      const { stdout, stderr } = await execFileAsync(
+        SUDO_PATH,
+        [scriptPath, name, tempFile],
+        {
+          timeout: 10000,
+          maxBuffer: 1024 * 1024,
+          encoding: 'utf8',
+        }
+      );
       
-      // Set correct permissions (644)
-      await execFileAsync(SUDO_PATH, ['chmod', '644', filterPath], { timeout: 5000 });
-      
-      // Set ownership to root:root
-      await execFileAsync(SUDO_PATH, ['chown', 'root:root', filterPath], { timeout: 5000 });
-      
-      console.log(`[FILTER CREATE] ✅ Filter file created: ${filterPath}`);
-      
-      // Clean up temp file
+      // Clean up temp file after successful creation
       try {
         fs.unlinkSync(tempFile);
       } catch (cleanupErr) {
         console.warn(`[FILTER CREATE] ⚠️ Failed to cleanup temp file: ${cleanupErr.message}`);
       }
+      
+      if (stderr && !stdout) {
+        throw new Error(`Script error: ${stderr}`);
+      }
+      
+      console.log(`[FILTER CREATE] ✅ Filter file created: ${filterPath}`);
     } catch (writeErr) {
       // Clean up temp file on error
       try {
-        fs.unlinkSync(tempFile);
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile);
+        }
       } catch (cleanupErr) {
         // Ignore cleanup errors
       }
+      
+      // Check if error is because file already exists
+      if (writeErr.message && writeErr.message.includes('already exists')) {
+        return res.status(409).json({
+          success: false,
+          error: 'Filter already exists',
+          details: {
+            filterName: name,
+            filterPath: filterPath,
+            suggestion: 'Use a different name or modify the existing filter manually.',
+          },
+        });
+      }
+      
       throw new Error(`Failed to write filter file: ${writeErr.message}`);
     }
 

@@ -156,7 +156,7 @@ export function JailBuilder({}: JailBuilderProps) {
             placeholder="e.g., nginx-custom"
             required
             className="font-mono"
-            pattern="[a-zA-Z0-9-]+"
+            pattern="[a-zA-Z0-9\-]+"
             title="Only letters, numbers, and dashes allowed"
           />
           <p className="font-mono text-xs text-muted-foreground mt-1">

@@ -1,47 +1,38 @@
 #!/bin/bash
-# Helper script to create filter files for fail2ban
-# Usage: create-filter-file.sh <filter-name> <filter-content-file>
-
-set -e
+# Helper script to create fail2ban filter file
+# Usage: create-filter-file.sh <filter-name> <temp-file-path>
+# Reads filter content from temp file
+# Creates /etc/fail2ban/filter.d/<filter-name>.conf with provided content
 
 FILTER_NAME="$1"
-FILTER_CONTENT_FILE="$2"
-FILTER_PATH="/etc/fail2ban/filter.d/${FILTER_NAME}.conf"
+TEMP_FILE="$2"
+FILTER_DIR="/etc/fail2ban/filter.d"
+FILTER_FILE="${FILTER_DIR}/${FILTER_NAME}.conf"
 
-if [ -z "$FILTER_NAME" ] || [ -z "$FILTER_CONTENT_FILE" ]; then
-    echo "Error: Missing arguments. Usage: $0 <filter-name> <filter-content-file>" >&2
+if [ -z "$FILTER_NAME" ]; then
+    echo "Error: Filter name is required" >&2
     exit 1
 fi
 
-if [ ! -f "$FILTER_CONTENT_FILE" ]; then
-    echo "Error: Filter content file not found: $FILTER_CONTENT_FILE" >&2
+if [ -z "$TEMP_FILE" ] || [ ! -f "$TEMP_FILE" ]; then
+    echo "Error: Temp file path is required and must exist: $TEMP_FILE" >&2
     exit 1
 fi
 
-# Check if filter already exists
-if [ -f "$FILTER_PATH" ]; then
-    echo "Filter file already exists: $FILTER_PATH"
-    exit 0
-fi
-
-# Copy filter file
-if ! cp "$FILTER_CONTENT_FILE" "$FILTER_PATH"; then
-    echo "Error: Failed to copy filter file to $FILTER_PATH" >&2
+# Check if filter file already exists
+if [ -f "$FILTER_FILE" ]; then
+    echo "Error: Filter file already exists: $FILTER_FILE" >&2
     exit 1
 fi
 
-# Set permissions
-if ! chmod 0644 "$FILTER_PATH"; then
-    echo "Error: Failed to set permissions on $FILTER_PATH" >&2
-    exit 1
-fi
+# Copy temp file to final location
+cp "$TEMP_FILE" "$FILTER_FILE"
 
-# Set ownership
-if ! chown root:root "$FILTER_PATH"; then
-    echo "Error: Failed to set ownership on $FILTER_PATH" >&2
-    exit 1
-fi
+# Set correct permissions (644)
+chmod 644 "$FILTER_FILE"
 
-echo "Filter file created: $FILTER_PATH"
+# Set ownership to root:root
+chown root:root "$FILTER_FILE"
+
+echo "Filter file created: $FILTER_FILE"
 exit 0
-
