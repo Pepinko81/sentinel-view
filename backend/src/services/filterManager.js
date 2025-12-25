@@ -19,7 +19,13 @@ const SUDO_PATH = process.env.SUDO_PATH || '/usr/bin/sudo';
 async function getJailConfig(jailName) {
   const configFiles = [];
   
-  // Check jail.d/*.conf files
+  // Check jail.local first (highest priority)
+  const jailLocalPath = path.join(FAIL2BAN_CONFIG_DIR, 'jail.local');
+  if (fs.existsSync(jailLocalPath)) {
+    configFiles.push(jailLocalPath);
+  }
+  
+  // Check jail.d/*.conf files (package-specific overrides)
   const jailDir = path.join(FAIL2BAN_CONFIG_DIR, 'jail.d');
   if (fs.existsSync(jailDir)) {
     const files = fs.readdirSync(jailDir);
@@ -30,13 +36,13 @@ async function getJailConfig(jailName) {
     }
   }
   
-  // Check jail.local
-  const jailLocalPath = path.join(FAIL2BAN_CONFIG_DIR, 'jail.local');
-  if (fs.existsSync(jailLocalPath)) {
-    configFiles.push(jailLocalPath);
+  // Check jail.conf last (default fail2ban configuration)
+  const jailConfPath = path.join(FAIL2BAN_CONFIG_DIR, 'jail.conf');
+  if (fs.existsSync(jailConfPath)) {
+    configFiles.push(jailConfPath);
   }
   
-  // Search for jail configuration
+  // Search for jail configuration (in priority order)
   for (const configFile of configFiles) {
     try {
       const content = fs.readFileSync(configFile, 'utf8');
@@ -64,31 +70,59 @@ async function getJailConfig(jailName) {
 function extractJailConfig(content, jailName) {
   const lines = content.split('\n');
   let inJailSection = false;
+  let inDefaultSection = false;
   const config = {};
+  const defaultConfig = {};
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     
-    // Check for jail section start
-    if (line === `[${jailName}]`) {
-      inJailSection = true;
+    // Check for DEFAULT section
+    if (line === '[DEFAULT]') {
+      inDefaultSection = true;
+      inJailSection = false;
       continue;
     }
     
-    // Check for next section (end of current jail)
-    if (inJailSection && line.startsWith('[') && line.endsWith(']')) {
-      break;
+    // Check for jail section start
+    if (line === `[${jailName}]`) {
+      inJailSection = true;
+      inDefaultSection = false;
+      continue;
+    }
+    
+    // Check for next section (end of current section)
+    if ((inJailSection || inDefaultSection) && line.startsWith('[') && line.endsWith(']')) {
+      if (inJailSection) {
+        break; // End of jail section
+      }
+      inDefaultSection = false;
+      continue;
     }
     
     // Parse configuration lines
-    if (inJailSection && line.includes('=')) {
+    if ((inJailSection || inDefaultSection) && line.includes('=') && !line.startsWith('#')) {
       const [key, ...valueParts] = line.split('=');
-      const value = valueParts.join('=').trim();
-      config[key.trim()] = value;
+      const keyTrimmed = key.trim();
+      let value = valueParts.join('=').trim();
+      
+      // Convert boolean values (case-insensitive)
+      if (keyTrimmed === 'enabled') {
+        value = value.toLowerCase() === 'true' || value === '1';
+      }
+      
+      if (inJailSection) {
+        config[keyTrimmed] = value;
+      } else if (inDefaultSection) {
+        defaultConfig[keyTrimmed] = value;
+      }
     }
   }
   
-  return inJailSection && Object.keys(config).length > 0 ? config : null;
+  // Merge default config with jail-specific config (jail config overrides defaults)
+  const mergedConfig = { ...defaultConfig, ...config };
+  
+  return inJailSection && Object.keys(mergedConfig).length > 0 ? mergedConfig : null;
 }
 
 /**
