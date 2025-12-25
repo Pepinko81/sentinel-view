@@ -265,11 +265,20 @@ router.post('/create', async (req, res, next) => {
               // Reload fail2ban to load new config
               console.log(`[FILTER CREATE] Reloading fail2ban to load new config...`);
               try {
-                await execFileAsync(SUDO_PATH, [FAIL2BAN_CLIENT_PATH, 'reload'], { timeout: 10000 });
-                console.log(`[FILTER CREATE] ✅ Fail2ban reloaded`);
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second after reload
+                const { runFail2banAction } = require('../services/fail2banControl');
+                // Use reload command (if available) or restart
+                try {
+                  await execFileAsync(SUDO_PATH, [FAIL2BAN_CLIENT_PATH, 'reload'], { timeout: 10000 });
+                  console.log(`[FILTER CREATE] ✅ Fail2ban reloaded`);
+                } catch (reloadErr) {
+                  // If reload fails, try restart
+                  console.warn(`[FILTER CREATE] Reload failed, trying restart: ${reloadErr.message}`);
+                  await restartFail2ban();
+                  console.log(`[FILTER CREATE] ✅ Fail2ban restarted`);
+                }
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds after reload/restart
               } catch (reloadErr) {
-                console.warn(`[FILTER CREATE] ⚠️ Failed to reload fail2ban: ${reloadErr.message}`);
+                console.warn(`[FILTER CREATE] ⚠️ Failed to reload/restart fail2ban: ${reloadErr.message}`);
                 // Continue anyway - config was updated
               }
             } catch (enableErr) {

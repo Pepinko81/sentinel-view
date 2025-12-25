@@ -530,23 +530,21 @@ async function enableJailInConfig(jailName) {
   }
   fs.writeFileSync(tempFile, newContent, 'utf8');
   
-  // Copy to target location with sudo
+  // Write to target location using helper script (for security)
   const SUDO_PATH = process.env.SUDO_PATH || '/usr/bin/sudo';
   const { execFile } = require('child_process');
   const { promisify } = require('util');
   const execFileAsync = promisify(execFile);
   
+  const scriptPath = path.resolve(__dirname, '../../scripts/write-jail-config.sh');
+  
   try {
-    // Ensure jail.d directory exists
-    if (targetFile === jailOverrideFile && !fs.existsSync(jailDir)) {
-      await execFileAsync(SUDO_PATH, ['mkdir', '-p', jailDir], { timeout: 5000 });
-    }
-    
-    // Copy temp file to target
-    await execFileAsync(SUDO_PATH, ['cp', tempFile, targetFile], { timeout: 10000 });
-    
-    // Set correct permissions
-    await execFileAsync(SUDO_PATH, ['chmod', '644', targetFile], { timeout: 5000 });
+    // Use helper script to write config file
+    await execFileAsync(SUDO_PATH, [scriptPath, targetFile, tempFile], {
+      timeout: 10000,
+      maxBuffer: 1024 * 1024,
+      encoding: 'utf8',
+    });
     
     // Clean up temp file
     try {
