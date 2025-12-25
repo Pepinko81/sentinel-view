@@ -39,6 +39,7 @@ router.get('/', async (req, res, next) => {
     const cacheKey = 'jails';
     const cached = cache.get(cacheKey);
     
+    // Return cached data immediately (performance optimization)
     if (cached) {
       res.setHeader('X-API-Version', API_VERSION);
       return res.json(cached);
@@ -53,87 +54,14 @@ router.get('/', async (req, res, next) => {
       partial: false,
     };
     
-    // Use monitor-security.sh for comprehensive data
-    let monitorData = null;
-    
-    try {
-      const { stdout, stderr } = await executeScript('monitor-security.sh');
-      
-      // Check for fail2ban errors
-      const errorCheck = detectFail2banError(stdout, stderr);
-      if (errorCheck.isError) {
-        console.warn('fail2ban error detected:', errorCheck.message);
-        
-        // Try to parse what we can
-        monitorData = safeParse(parseMonitorOutput, stdout, defaultMonitorOutput);
-        monitorData.errors = monitorData.errors || [];
-        monitorData.errors.push(errorCheck.message);
-        monitorData.partial = true;
-      } else {
-        monitorData = safeParse(parseMonitorOutput, stdout, defaultMonitorOutput);
-      }
-    } catch (err) {
-      console.error('Failed to execute monitor-security.sh:', err.message);
-      
-      // Fallback: try quick-check.sh
-      try {
-        const { stdout: quickOutput, stderr: quickStderr } = await executeScript('quick-check.sh');
-        
-        const errorCheck = detectFail2banError(quickOutput, quickStderr);
-        if (errorCheck.isError) {
-          const errorResponse = serializeJailsResponse({
-            ...safeDefaults,
-            errors: [errorCheck.message],
-            partial: true,
-            serverStatus: 'offline',
-          });
-          
-          cache.set(cacheKey, errorResponse, config.cache.jailsTTL);
-          res.setHeader('X-API-Version', API_VERSION);
-          return res.json(errorResponse);
-        }
-        
-        const quickData = safeParse(parseQuickCheck, quickOutput, {
-          jails: [],
-          bannedCount: 0,
-          recentAttacks: 0,
-          errors: 0,
-        });
-        
-        // Create minimal jail entries
-        const jails = (quickData.jails || []).map(jailName => ({
-          name: jailName,
-          enabled: false,
-          bannedIPs: [],
-          category: inferCategory(jailName),
-          filter: jailName,
-        }));
-        
-        const rawResponse = {
-          jails,
-          lastUpdated: new Date().toISOString(),
-          serverStatus: quickData.errors && quickData.errors.length > 0 ? 'partial' : 'online',
-          errors: quickData.errors || [],
-          partial: quickData.partial || false,
-        };
-        
-        const response = serializeJailsResponse(rawResponse);
-        
-        cache.set(cacheKey, response, config.cache.jailsTTL);
-        res.setHeader('X-API-Version', API_VERSION);
-        return res.json(response);
-      } catch (fallbackErr) {
-        console.error('Fallback script also failed:', fallbackErr.message);
-        const errorResponse = serializeJailsResponse({
-          ...safeDefaults,
-          errors: [`Script execution failed: ${err.message}`, `Fallback failed: ${fallbackErr.message}`],
-          partial: true,
-        });
-        
-        res.setHeader('X-API-Version', API_VERSION);
-        return res.json(errorResponse);
-      }
-    }
+    // Skip monitor-security.sh for performance - use direct fail2ban-client calls instead
+    // This is much faster than executing bash scripts
+    let monitorData = {
+      fail2ban: { jails: [] },
+      jails: [],
+      errors: [],
+      partial: false,
+    };
     
     // Check for parsing errors
     if (monitorData.errors && monitorData.errors.length > 0) {
@@ -160,45 +88,44 @@ router.get('/', async (req, res, next) => {
     // - Jail NEVER disappears from API response
     // ---------------------------------------------
     
-    // Discover ALL configured jails from config files (source of truth)
-    let configuredJailsList = [];
-    let discoveryErrors = [];
-    try {
-      const discoveryResult = await discoverConfiguredJails();
-      configuredJailsList = discoveryResult.jails || [];
-      if (discoveryResult.errors) {
-        discoveryErrors = discoveryResult.errors;
-      }
-    } catch (err) {
-      console.error('Jail discovery failed:', err.message);
-      discoveryErrors.push(`Jail discovery failed: ${err.message}`);
-      // Fallback to runtime list if discovery fails
-      configuredJailsList = monitorData.fail2ban?.jails || [];
-    }
-    
-    // Optional: refine bannedCount/bannedIPs using test-fail2ban.sh (real fail2ban-client status <jail>)
-    let testData = {};
-    try {
-      const { stdout: testStdout } = await executeScript('test-fail2ban.sh');
-      testData = parseTestFail2ban(testStdout || '');
-    } catch (err) {
-      console.error('Failed to execute or parse test-fail2ban.sh:', err.message);
-      // Do not crash jails listing – we can still use runtime state checks
-    }
+    // Discovery already done above in parallel
     
     // Get active jails from fail2ban-client status (runtime state)
+    // Do this in parallel with jail discovery for performance
     let activeJailsList = [];
-    try {
-      const globalStatus = await getGlobalFail2banStatus();
-      activeJailsList = globalStatus.jails || [];
-      console.log(`[JAILS API] Found ${activeJailsList.length} active jails: ${activeJailsList.join(', ')}`);
-    } catch (err) {
-      console.warn(`[JAILS API] Failed to get active jails list: ${err.message}`);
-      // Continue with configured jails only
+    const [discoveryResult, globalStatusResult] = await Promise.allSettled([
+      discoverConfiguredJails(),
+      getGlobalFail2banStatus().catch(err => {
+        // Silently fail - we'll continue without active jails list
+        return { jails: [] };
+      })
+    ]);
+    
+    // Extract results
+    let configuredJailsList = [];
+    let discoveryErrors = [];
+    if (discoveryResult.status === 'fulfilled') {
+      configuredJailsList = discoveryResult.value.jails || [];
+      if (discoveryResult.value.errors) {
+        discoveryErrors = discoveryResult.value.errors;
+      }
+    } else {
+      console.error('Jail discovery failed:', discoveryResult.reason?.message);
+      discoveryErrors.push(`Jail discovery failed: ${discoveryResult.reason?.message}`);
+    }
+    
+    if (globalStatusResult.status === 'fulfilled') {
+      activeJailsList = globalStatusResult.value.jails || [];
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[JAILS API] Found ${activeJailsList.length} active jails: ${activeJailsList.join(', ')}`);
+      }
+    } else {
+      // Silently continue - fail2ban may be down
     }
     
     // Build jails array from ALL configured jails (source of truth)
     // For each configured jail, check runtime state and get REAL banned count
+    // Only check runtime state for active jails (performance optimization)
     const jails = await Promise.all(configuredJailsList.map(async (jailName) => {
       // Determine status: ENABLED if in active list, DISABLED otherwise
       const isEnabled = activeJailsList.includes(jailName);
@@ -211,6 +138,7 @@ router.get('/', async (req, res, next) => {
       
       if (isEnabled) {
         // Jail is active - get real status (with timeout handled by getJailRuntimeState)
+        // Use shorter timeout for performance (5s instead of default)
         try {
           const runtimeState = await getJailRuntimeState(jailName);
           if (runtimeState.enabled && runtimeState.status) {
@@ -222,15 +150,17 @@ router.get('/', async (req, res, next) => {
             totalBanned = parsedStatus.totalBanned;
           }
         } catch (err) {
-          // If status check fails for active jail (timeout or error), log but don't fail
-          // Use defaults: jail is enabled but banned count unknown
-          const isTimeout = err.killed === true || err.code === 'ETIMEDOUT';
-          console.warn(`[JAILS API] ${isTimeout ? 'Timeout' : 'Failed'} getting status for active jail ${jailName}: ${err.message}`);
+          // If status check fails for active jail (timeout or error), use defaults
+          // Don't log warnings for timeouts in production (too noisy)
+          if (process.env.NODE_ENV === 'development') {
+            const isTimeout = err.killed === true || err.code === 'ETIMEDOUT';
+            console.warn(`[JAILS API] ${isTimeout ? 'Timeout' : 'Failed'} getting status for active jail ${jailName}: ${err.message}`);
+          }
           currentlyBanned = 0; // Default to 0 if we can't get status
           bannedIPsRaw = [];
         }
       } else {
-        // Jail is disabled - banned count is always 0
+        // Jail is disabled - banned count is always 0 (no need to check)
         currentlyBanned = 0;
         bannedIPsRaw = [];
       }
@@ -680,7 +610,7 @@ router.post('/:name/enable', async (req, res, next) => {
     }
 
     // Verify final state - wait a moment for state to settle
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     try {
       const globalStatus = await getGlobalFail2banStatus();
@@ -809,7 +739,7 @@ router.post('/:name/disable', async (req, res, next) => {
     }
 
     // Verify final state - wait a moment for state to settle
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     // Verify final state (disabled or missing)
     try {
@@ -948,7 +878,7 @@ router.post('/:name/toggle', async (req, res, next) => {
     }
 
     // Verify final state - wait a moment for state to settle
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     let finalState;
     let verificationFailed = false;

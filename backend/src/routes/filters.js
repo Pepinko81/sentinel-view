@@ -272,31 +272,8 @@ router.post('/create', async (req, res, next) => {
       throw new Error(`Failed to write filter file: ${writeErr.message}`);
     }
 
-    // Validate filter syntax before restarting fail2ban
-    console.log(`[FILTER CREATE] Validating filter syntax...`);
-    try {
-      const FAIL2BAN_REGEX_PATH = process.env.FAIL2BAN_REGEX_PATH || '/usr/bin/fail2ban-regex';
-      const { stdout, stderr } = await execFileAsync(SUDO_PATH, [
-        FAIL2BAN_REGEX_PATH,
-        '--test-filter',
-        filterPath
-      ], {
-        timeout: 10000,
-        maxBuffer: 1024 * 1024,
-        encoding: 'utf8',
-      });
-      
-      const output = (stdout + stderr).toLowerCase();
-      if (output.includes('error') && !output.includes('ok')) {
-        console.warn(`[FILTER CREATE] ⚠️ Filter validation warning: ${stdout + stderr}`);
-        // Don't fail - let fail2ban handle it, but log the warning
-      } else {
-        console.log(`[FILTER CREATE] ✅ Filter syntax is valid`);
-      }
-    } catch (validateErr) {
-      console.warn(`[FILTER CREATE] ⚠️ Could not validate filter syntax: ${validateErr.message}`);
-      // Continue anyway - fail2ban will show the error if there's a problem
-    }
+    // Skip validation - fail2ban will validate on restart
+    // fail2ban-regex doesn't have --test-filter option in all versions
 
     // Restart fail2ban service (mandatory - filters are only loaded at service boot)
     console.log(`[FILTER CREATE] Restarting fail2ban service...`);
@@ -304,8 +281,8 @@ router.post('/create', async (req, res, next) => {
       await restartFail2ban();
       console.log(`[FILTER CREATE] ✅ Fail2ban service restarted`);
       
-      // Wait a bit longer for fail2ban to fully start after restart
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Wait for fail2ban to fully start after restart (reduced timeout)
+      await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (restartErr) {
       console.error(`[FILTER CREATE] ❌ Failed to restart fail2ban: ${restartErr.message}`);
       
@@ -369,7 +346,7 @@ router.post('/create', async (req, res, next) => {
                   await restartFail2ban();
                   console.log(`[FILTER CREATE] ✅ Fail2ban restarted`);
                 }
-                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds after reload/restart
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second after reload/restart
               } catch (reloadErr) {
                 console.warn(`[FILTER CREATE] ⚠️ Failed to reload/restart fail2ban: ${reloadErr.message}`);
                 // Continue anyway - config was updated
@@ -414,7 +391,7 @@ router.post('/create', async (req, res, next) => {
               }
               
               // Verify jail is actually started by checking active jails list
-              await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds for jail to start
+              await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second for jail to start
               const { getGlobalFail2banStatus } = require('../services/fail2banControl');
               const globalStatus = await getGlobalFail2banStatus();
               const activeJails = globalStatus.jails || [];
