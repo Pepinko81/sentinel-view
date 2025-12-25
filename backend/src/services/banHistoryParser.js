@@ -21,15 +21,15 @@ function parseBanHistory(logContent, jailFilter = null, limit = 50) {
   const events = [];
 
   // Patterns to match various fail2ban log formats:
-  // 2024-01-01 12:00:00,123 fail2ban.actions: [jail-name] Ban 192.168.1.1
-  // 2024-01-01 12:00:00,123 fail2ban.actions: [jail-name] Unban 192.168.1.1
-  // 2024-01-01 12:00:00,123 fail2ban.actions: [jail-name] Restore Ban 192.168.1.1
-  // Also handle formats like:
-  // 2024-01-01 12:00:00,123 fail2ban.actions[1234]: [jail-name] Ban 192.168.1.1
-  // 2024-01-01 12:00:00,123 fail2ban.action: [jail-name] Ban 192.168.1.1
+  // Format 1: 2024-01-01 12:00:00,123 fail2ban.actions: [jail-name] Ban 192.168.1.1
+  // Format 2: 2024-01-01 12:00:00,123 fail2ban.actions [1234]: NOTICE [jail-name] Ban 192.168.1.1
+  // Format 3: 2024-01-01 12:00:00,123 fail2ban.actions [1234]: WARNING [jail-name] Unban 192.168.1.1
+  // Format 4: 2024-01-01 12:00:00,123 fail2ban.action: [jail-name] Ban 192.168.1.1
   
-  // More flexible action pattern - handles various formats
-  const actionPattern = /fail2ban\.(?:actions?|action)(?:\[[^\]]+\])?:\s+\[([^\]]+)\]\s+(Ban|Unban|Restore\s+Ban)\s+(\d+\.\d+\.\d+\.\d+)/i;
+  // More flexible action pattern - handles various formats including NOTICE/WARNING prefixes
+  // Matches: fail2ban.actions [pid]: NOTICE/WARNING [jail] Ban/Unban/Restore Ban IP
+  // Also: fail2ban.actions: [jail] Ban/Unban/Restore Ban IP
+  const actionPattern = /fail2ban\.(?:actions?|action)(?:\[[^\]]+\])?:\s+(?:NOTICE|WARNING|INFO|ERROR)?\s*\[([^\]]+)\]\s+(Ban|Unban|Restore\s+Ban)\s+(\d+\.\d+\.\d+\.\d+)/i;
   // More flexible timestamp pattern - handles with/without milliseconds
   const timestampPattern = /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})(?:,(\d{3}))?/;
 
@@ -108,31 +108,64 @@ async function getBanHistory(jailFilter = null, limit = 50) {
     throw new Error(`Fail2ban log file not found: ${FAIL2BAN_LOG_PATH}`);
   }
 
+  let logContent = '';
+  let readError = null;
+
+  // Try to read directly first (if file is readable without sudo)
   try {
-    // Read log file using helper script to get last N lines
-    // Use larger limit to account for filtering and ensure we get enough events
-    const readLimit = jailFilter ? limit * 10 : limit * 5; // Read more lines if filtering
-    // __dirname is backend/src/services, so we need to go up two levels to reach backend/scripts
-    const scriptPath = path.resolve(__dirname, '../../scripts/read-fail2ban-log.sh');
-    const { stdout, stderr } = await execFileAsync(
-      SUDO_PATH,
-      [scriptPath, String(readLimit)],
-      {
-        timeout: 10000,
-        maxBuffer: 5 * 1024 * 1024,
-        encoding: 'utf8',
-      }
-    );
-
-    if (stderr && !stdout) {
-      throw new Error(`Failed to read fail2ban log: ${stderr}`);
+    const fileContent = fs.readFileSync(FAIL2BAN_LOG_PATH, 'utf8');
+    const lines = fileContent.split('\n');
+    const readLimit = jailFilter ? limit * 10 : limit * 5;
+    // Get last N lines
+    logContent = lines.slice(-readLimit).join('\n');
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[BAN HISTORY PARSER] Read log file directly (no sudo needed)`);
     }
+  } catch (directReadError) {
+    // If direct read fails, try using sudo script
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[BAN HISTORY PARSER] Direct read failed, trying sudo script: ${directReadError.message}`);
+    }
+    readError = directReadError;
+    
+    try {
+      // Read log file using helper script to get last N lines
+      // Use larger limit to account for filtering and ensure we get enough events
+      const readLimit = jailFilter ? limit * 10 : limit * 5; // Read more lines if filtering
+      // __dirname is backend/src/services, so we need to go up two levels to reach backend/scripts
+      const scriptPath = path.resolve(__dirname, '../../scripts/read-fail2ban-log.sh');
+      const { stdout, stderr } = await execFileAsync(
+        SUDO_PATH,
+        [scriptPath, String(readLimit)],
+        {
+          timeout: 10000,
+          maxBuffer: 5 * 1024 * 1024,
+          encoding: 'utf8',
+        }
+      );
 
-    const logContent = stdout || '';
+      if (stderr && !stdout) {
+        throw new Error(`Failed to read fail2ban log: ${stderr}`);
+      }
+
+      logContent = stdout || '';
     if (process.env.NODE_ENV === 'development') {
       console.log(`[BAN HISTORY PARSER] Read ${logContent.split('\n').length} lines from log file`);
       if (logContent.length > 0) {
-        console.log(`[BAN HISTORY PARSER] First 200 chars: ${logContent.substring(0, 200)}`);
+        console.log(`[BAN HISTORY PARSER] First 500 chars: ${logContent.substring(0, 500)}`);
+        // Show sample lines that might contain ban events
+        const sampleLines = logContent.split('\n').filter(line => 
+          line.toLowerCase().includes('ban') || 
+          line.toLowerCase().includes('unban') ||
+          line.toLowerCase().includes('restore')
+        ).slice(0, 5);
+        if (sampleLines.length > 0) {
+          console.log(`[BAN HISTORY PARSER] Sample lines with ban/unban:`, sampleLines);
+        } else {
+          console.log(`[BAN HISTORY PARSER] No lines found containing 'ban', 'unban', or 'restore'`);
+        }
+      } else {
+        console.log(`[BAN HISTORY PARSER] WARNING: Log content is empty!`);
       }
     }
 
@@ -144,15 +177,20 @@ async function getBanHistory(jailFilter = null, limit = 50) {
     }
 
     return events;
-  } catch (err) {
-    // Check if it's a permission error
-    if (err.code === 'ENOENT' || err.message.includes('not found')) {
-      throw new Error(`Fail2ban log file not found or not accessible: ${FAIL2BAN_LOG_PATH}`);
+    } catch (sudoError) {
+      // Both direct read and sudo failed
+      if (process.env.NODE_ENV === 'development') {
+        console.error(`[BAN HISTORY PARSER] Sudo script also failed: ${sudoError.message}`);
+      }
+      // Check if it's a permission error
+      if (sudoError.code === 'ENOENT' || sudoError.message.includes('not found')) {
+        throw new Error(`Fail2ban log file not found or not accessible: ${FAIL2BAN_LOG_PATH}`);
+      }
+      if (sudoError.code === 'EACCES' || sudoError.message.includes('Permission denied') || sudoError.message.includes('password')) {
+        throw new Error(`Permission denied: Cannot read ${FAIL2BAN_LOG_PATH}. Check file permissions or sudo configuration. Error: ${sudoError.message}`);
+      }
+      throw new Error(`Failed to read fail2ban log: ${sudoError.message}`);
     }
-    if (err.code === 'EACCES' || err.message.includes('Permission denied')) {
-      throw new Error(`Permission denied: Cannot read ${FAIL2BAN_LOG_PATH}. Check sudo permissions.`);
-    }
-    throw new Error(`Failed to read fail2ban log: ${err.message}`);
   }
 }
 
