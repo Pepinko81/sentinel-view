@@ -109,7 +109,6 @@ async function getBanHistory(jailFilter = null, limit = 50) {
   }
 
   let logContent = '';
-  let readError = null;
 
   // Try to read directly first (if file is readable without sudo)
   try {
@@ -126,7 +125,6 @@ async function getBanHistory(jailFilter = null, limit = 50) {
     if (process.env.NODE_ENV === 'development') {
       console.log(`[BAN HISTORY PARSER] Direct read failed, trying sudo script: ${directReadError.message}`);
     }
-    readError = directReadError;
     
     try {
       // Read log file using helper script to get last N lines
@@ -149,34 +147,6 @@ async function getBanHistory(jailFilter = null, limit = 50) {
       }
 
       logContent = stdout || '';
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[BAN HISTORY PARSER] Read ${logContent.split('\n').length} lines from log file`);
-      if (logContent.length > 0) {
-        console.log(`[BAN HISTORY PARSER] First 500 chars: ${logContent.substring(0, 500)}`);
-        // Show sample lines that might contain ban events
-        const sampleLines = logContent.split('\n').filter(line => 
-          line.toLowerCase().includes('ban') || 
-          line.toLowerCase().includes('unban') ||
-          line.toLowerCase().includes('restore')
-        ).slice(0, 5);
-        if (sampleLines.length > 0) {
-          console.log(`[BAN HISTORY PARSER] Sample lines with ban/unban:`, sampleLines);
-        } else {
-          console.log(`[BAN HISTORY PARSER] No lines found containing 'ban', 'unban', or 'restore'`);
-        }
-      } else {
-        console.log(`[BAN HISTORY PARSER] WARNING: Log content is empty!`);
-      }
-    }
-
-    // Parse the log content
-    const events = parseBanHistory(logContent, jailFilter, limit);
-
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[BAN HISTORY PARSER] Returning ${events.length} events`);
-    }
-
-    return events;
     } catch (sudoError) {
       // Both direct read and sudo failed
       if (process.env.NODE_ENV === 'development') {
@@ -192,6 +162,36 @@ async function getBanHistory(jailFilter = null, limit = 50) {
       throw new Error(`Failed to read fail2ban log: ${sudoError.message}`);
     }
   }
+
+  // Debug logging (always executed after logContent is read)
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[BAN HISTORY PARSER] Read ${logContent.split('\n').length} lines from log file`);
+    if (logContent.length > 0) {
+      console.log(`[BAN HISTORY PARSER] First 500 chars: ${logContent.substring(0, 500)}`);
+      // Show sample lines that might contain ban events
+      const sampleLines = logContent.split('\n').filter(line => 
+        line.toLowerCase().includes('ban') || 
+        line.toLowerCase().includes('unban') ||
+        line.toLowerCase().includes('restore')
+      ).slice(0, 5);
+      if (sampleLines.length > 0) {
+        console.log(`[BAN HISTORY PARSER] Sample lines with ban/unban:`, sampleLines);
+      } else {
+        console.log(`[BAN HISTORY PARSER] No lines found containing 'ban', 'unban', or 'restore'`);
+      }
+    } else {
+      console.log(`[BAN HISTORY PARSER] WARNING: Log content is empty!`);
+    }
+  }
+
+  // Parse the log content
+  const events = parseBanHistory(logContent, jailFilter, limit);
+
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[BAN HISTORY PARSER] Returning ${events.length} events`);
+  }
+
+  return events;
 }
 
 module.exports = {
