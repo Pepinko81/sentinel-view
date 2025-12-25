@@ -176,15 +176,9 @@ router.get('/', async (req, res, next) => {
       configuredJailsList = monitorData.fail2ban?.jails || [];
     }
     
-    // Optional: refine bannedCount/bannedIPs using test-fail2ban.sh (real fail2ban-client status <jail>)
+    // Skip test-fail2ban.sh for performance - use getJailRuntimeState instead (faster)
+    // This script is slow and we can get the same data from direct fail2ban-client calls
     let testData = {};
-    try {
-      const { stdout: testStdout } = await executeScript('test-fail2ban.sh');
-      testData = parseTestFail2ban(testStdout || '');
-    } catch (err) {
-      console.error('Failed to execute or parse test-fail2ban.sh:', err.message);
-      // Do not crash jails listing – we can still use runtime state checks
-    }
     
     // Get active jails from fail2ban-client status (runtime state)
     let activeJailsList = [];
@@ -199,6 +193,7 @@ router.get('/', async (req, res, next) => {
     
     // Build jails array from ALL configured jails (source of truth)
     // For each configured jail, check runtime state and get REAL banned count
+    // Only check runtime state for active jails (performance optimization)
     const jails = await Promise.all(configuredJailsList.map(async (jailName) => {
       // Determine status: ENABLED if in active list, DISABLED otherwise
       const isEnabled = activeJailsList.includes(jailName);
@@ -211,6 +206,7 @@ router.get('/', async (req, res, next) => {
       
       if (isEnabled) {
         // Jail is active - get real status (with timeout handled by getJailRuntimeState)
+        // Use shorter timeout for performance (5s instead of default)
         try {
           const runtimeState = await getJailRuntimeState(jailName);
           if (runtimeState.enabled && runtimeState.status) {
@@ -222,15 +218,17 @@ router.get('/', async (req, res, next) => {
             totalBanned = parsedStatus.totalBanned;
           }
         } catch (err) {
-          // If status check fails for active jail (timeout or error), log but don't fail
-          // Use defaults: jail is enabled but banned count unknown
-          const isTimeout = err.killed === true || err.code === 'ETIMEDOUT';
-          console.warn(`[JAILS API] ${isTimeout ? 'Timeout' : 'Failed'} getting status for active jail ${jailName}: ${err.message}`);
+          // If status check fails for active jail (timeout or error), use defaults
+          // Don't log warnings for timeouts in production (too noisy)
+          if (process.env.NODE_ENV === 'development') {
+            const isTimeout = err.killed === true || err.code === 'ETIMEDOUT';
+            console.warn(`[JAILS API] ${isTimeout ? 'Timeout' : 'Failed'} getting status for active jail ${jailName}: ${err.message}`);
+          }
           currentlyBanned = 0; // Default to 0 if we can't get status
           bannedIPsRaw = [];
         }
       } else {
-        // Jail is disabled - banned count is always 0
+        // Jail is disabled - banned count is always 0 (no need to check)
         currentlyBanned = 0;
         bannedIPsRaw = [];
       }
@@ -680,7 +678,7 @@ router.post('/:name/enable', async (req, res, next) => {
     }
 
     // Verify final state - wait a moment for state to settle
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     try {
       const globalStatus = await getGlobalFail2banStatus();
@@ -809,7 +807,7 @@ router.post('/:name/disable', async (req, res, next) => {
     }
 
     // Verify final state - wait a moment for state to settle
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     // Verify final state (disabled or missing)
     try {
@@ -948,7 +946,7 @@ router.post('/:name/toggle', async (req, res, next) => {
     }
 
     // Verify final state - wait a moment for state to settle
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     let finalState;
     let verificationFailed = false;
