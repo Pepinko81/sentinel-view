@@ -1113,19 +1113,31 @@ router.post('/create', async (req, res, next) => {
       });
     }
 
-    // Validate logpath exists
+    // Validate logpath exists (use test -f for files, test -d for directories)
     try {
-      await execFileAsync(SUDO_PATH, ['ls', '-d', logpath], { timeout: 5000 });
-      console.log(`[JAIL CREATE] ✅ Logpath exists: ${logpath}`);
-    } catch (err) {
-      return res.status(400).json({
-        success: false,
-        error: `Log path does not exist or is not accessible: ${logpath}`,
-        details: {
-          logpath: logpath,
-          suggestion: 'Verify the log path exists and is readable.',
-        },
-      });
+      // Try as file first
+      await execFileAsync(SUDO_PATH, ['test', '-f', logpath], { timeout: 5000 });
+      console.log(`[JAIL CREATE] ✅ Logpath exists (file): ${logpath}`);
+    } catch (fileErr) {
+      // If not a file, try as directory (for log rotation patterns like /var/log/nginx/*.log)
+      try {
+        const logDir = path.dirname(logpath);
+        await execFileAsync(SUDO_PATH, ['test', '-d', logDir], { timeout: 5000 });
+        console.log(`[JAIL CREATE] ✅ Logpath directory exists: ${logDir}`);
+        // Also check if it's a wildcard pattern
+        if (logpath.includes('*')) {
+          console.log(`[JAIL CREATE] ⚠️ Logpath contains wildcard pattern: ${logpath}`);
+        }
+      } catch (dirErr) {
+        return res.status(400).json({
+          success: false,
+          error: `Log path does not exist or is not accessible: ${logpath}`,
+          details: {
+            logpath: logpath,
+            suggestion: 'Verify the log path exists and is readable. For wildcard patterns, ensure the directory exists.',
+          },
+        });
+      }
     }
 
     // Prepare config content
