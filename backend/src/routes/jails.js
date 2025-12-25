@@ -1069,15 +1069,22 @@ router.post('/create', async (req, res, next) => {
 
     console.log(`[JAIL CREATE] Creating jail: ${name}`);
 
-    // Check if jail already exists
+    // Check if jail already exists (in configuration files)
     const configuredJails = await discoverConfiguredJails();
     if (configuredJails.jails && configuredJails.jails.includes(name)) {
+      // Check if it's in jail.d (user-created) or jail.conf (system default)
+      const configFilePath = path.join(FAIL2BAN_JAIL_D_DIR, `${name}.conf`);
+      const isUserCreated = fs.existsSync(configFilePath);
+      
       return res.status(409).json({
         success: false,
-        error: `Jail "${name}" already exists. Cannot overwrite existing jails.`,
+        error: `Jail "${name}" already exists in configuration.`,
         details: {
           jailName: name,
-          suggestion: 'Use a different name or modify the existing jail manually.',
+          location: isUserCreated ? `User-created: ${configFilePath}` : `System default: /etc/fail2ban/jail.conf`,
+          suggestion: isUserCreated 
+            ? `Use a different name, or delete the existing jail configuration file: ${configFilePath}`
+            : `Use a different name. This jail is defined in the system default configuration.`,
         },
       });
     }
@@ -1099,16 +1106,24 @@ router.post('/create', async (req, res, next) => {
     // Validate filter exists
     const filterPath = path.join(FAIL2BAN_FILTER_DIR, `${filter}.conf`);
     try {
-      await execFileAsync(SUDO_PATH, ['test', '-f', filterPath], { timeout: 5000 });
-      console.log(`[JAIL CREATE] ✅ Filter file exists: ${filterPath}`);
+      // Try direct file check first (if readable without sudo)
+      if (fs.existsSync(filterPath)) {
+        console.log(`[JAIL CREATE] ✅ Filter file exists (direct check): ${filterPath}`);
+      } else {
+        // Try with sudo
+        await execFileAsync(SUDO_PATH, ['test', '-f', filterPath], { timeout: 5000 });
+        console.log(`[JAIL CREATE] ✅ Filter file exists (sudo check): ${filterPath}`);
+      }
     } catch (err) {
+      console.error(`[JAIL CREATE] ❌ Filter file check failed: ${err.message}`);
       return res.status(400).json({
         success: false,
-        error: `Filter file does not exist: ${filterPath}`,
+        error: `Filter file does not exist or is not accessible: ${filterPath}`,
         details: {
           filterName: filter,
           filterPath: filterPath,
           suggestion: `Create the filter file first: /etc/fail2ban/filter.d/${filter}.conf`,
+          note: 'Check if the filter file exists and has correct permissions.',
         },
       });
     }
