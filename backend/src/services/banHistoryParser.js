@@ -20,16 +20,14 @@ function parseBanHistory(logContent, jailFilter = null, limit = 50) {
   const lines = logContent.split('\n').filter(line => line.trim());
   const events = [];
 
-  // Patterns to match various fail2ban log formats:
-  // Format 1: 2024-01-01 12:00:00,123 fail2ban.actions: [jail-name] Ban 192.168.1.1
-  // Format 2: 2024-01-01 12:00:00,123 fail2ban.actions [1234]: NOTICE [jail-name] Ban 192.168.1.1
-  // Format 3: 2024-01-01 12:00:00,123 fail2ban.actions [1234]: WARNING [jail-name] Unban 192.168.1.1
-  // Format 4: 2024-01-01 12:00:00,123 fail2ban.action: [jail-name] Ban 192.168.1.1
+  // Patterns to match fail2ban log formats:
+  // Standard format: 2023-02-17 23:44:17,037 fail2ban.actions [992]: NOTICE [apache-auth] Ban 192.162.101.80
+  // Also: 2023-02-17 23:44:26,259 fail2ban.actions [992]: NOTICE [apache-auth] Unban 192.162.101.80
+  // Format: timestamp fail2ban.actions [pid]: LEVEL [jail] Action IP
   
-  // More flexible action pattern - handles various formats including NOTICE/WARNING prefixes
-  // Matches: fail2ban.actions [pid]: NOTICE/WARNING [jail] Ban/Unban/Restore Ban IP
-  // Also: fail2ban.actions: [jail] Ban/Unban/Restore Ban IP
-  const actionPattern = /fail2ban\.(?:actions?|action)(?:\[[^\]]+\])?:\s+(?:NOTICE|WARNING|INFO|ERROR)?\s*\[([^\]]+)\]\s+(Ban|Unban|Restore\s+Ban)\s+(\d+\.\d+\.\d+\.\d+)/i;
+  // Action pattern - matches the standard fail2ban log format
+  // Matches: fail2ban.actions [pid]: NOTICE/WARNING/INFO [jail] Ban/Unban/Restore Ban IP
+  const actionPattern = /fail2ban\.actions\s+\[[^\]]+\]:\s+(?:NOTICE|WARNING|INFO|ERROR)\s+\[([^\]]+)\]\s+(Ban|Unban|Restore\s+Ban)\s+(\d+\.\d+\.\d+\.\d+)/i;
   // More flexible timestamp pattern - handles with/without milliseconds
   const timestampPattern = /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})(?:,(\d{3}))?/;
 
