@@ -2,6 +2,13 @@
 
 Fail2Ban Web Dashboard – Server Security Monitor
 
+> **⚠️ SECURITY NOTICE**: This application requires system-level access to fail2ban and may execute privileged commands. 
+> - Always use strong authentication tokens
+> - Run in a secure network environment
+> - Review and restrict script execution permissions
+> - Keep dependencies updated
+> - Do not expose to public internet without proper security measures
+
 A comprehensive web-based dashboard for monitoring and managing fail2ban security configurations, active bans, and server security metrics.
 
 ## Project Overview

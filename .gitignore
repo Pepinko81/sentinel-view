@@ -7,9 +7,15 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
 dist
 dist-ssr
+
+# Environment files (keep .example files)
+.env
+.env.local
+.env.*.local
 *.local
 
 # Editor directories and files
@@ -25,11 +31,38 @@ dist-ssr
 
 # Backend
 backend/.env
+backend/.env.*
+!backend/.env.example
 backend/node_modules
 backend/*.log
 backend/fail2ban-backup-*
 backend/*.tar.gz
 
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Build outputs
+build/
+dist/
+*.tsbuildinfo
+
 # Backups
 fail2ban-backup-*
 *.bak
+*.backup
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Lock files (optional - uncomment if you want to ignore)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
