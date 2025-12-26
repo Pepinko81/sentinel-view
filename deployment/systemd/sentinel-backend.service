@@ -1,0 +1,28 @@
+[Unit]
+Description=Sentinel Dashboard Backend API
+After=network.target fail2ban.service
+Wants=fail2ban.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/sentinel/backend
+Environment="NODE_ENV=production"
+Environment="SCRIPTS_DIR=/opt/sentinel/backend/scripts"
+ExecStart=/usr/bin/node /opt/sentinel/backend/src/index.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sentinel-backend
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/sentinel /var/lib/fail2ban /var/log/fail2ban.log
+
+[Install]
+WantedBy=multi-user.target
+

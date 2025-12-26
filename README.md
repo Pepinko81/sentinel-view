@@ -31,13 +31,40 @@ This project is built with:
 - Node.js >= 18.0.0
 - npm or yarn
 - fail2ban installed and running (for backend)
+- Ubuntu/Debian Linux (for installer script)
 
 ### Installation
+
+#### Option 1: Automated Installation (Recommended)
+
+The easiest way to install Sentinel Dashboard is using the automated installer:
+
+```bash
+curl -s https://raw.githubusercontent.com/Pepinko81/sentinel-view/main/install.sh | sudo bash
+```
+
+Or download and run locally:
+
+```bash
+git clone https://github.com/Pepinko81/sentinel-view.git
+cd sentinel-view
+sudo ./install.sh
+```
+
+The installer will:
+- Detect your OS (Ubuntu/Debian)
+- Install Node.js, nginx, and fail2ban (if missing)
+- Clone/install Sentinel Dashboard to `/opt/sentinel`
+- Configure systemd services
+- Set up environment variables
+- Start services automatically
+
+#### Option 2: Manual Installation
 
 1. **Clone the repository:**
 
 ```sh
-git clone <YOUR_GIT_URL>
+git clone https://github.com/Pepinko81/sentinel-view.git
 cd sentinel-view
 ```
 
@@ -86,6 +113,72 @@ cd backend
 npm start
 ```
 
+## Deployment
+
+### Systemd Services
+
+When installed via the installer script, Sentinel Dashboard runs as systemd services:
+
+**Service Management:**
+```bash
+# Check status
+sudo systemctl status sentinel-backend
+sudo systemctl status sentinel-frontend
+
+# Start services
+sudo systemctl start sentinel-backend
+sudo systemctl start sentinel-frontend
+
+# Restart services
+sudo systemctl restart sentinel-backend
+sudo systemctl restart sentinel-frontend
+
+# Stop services
+sudo systemctl stop sentinel-backend
+sudo systemctl stop sentinel-frontend
+
+# View logs
+sudo journalctl -u sentinel-backend -f
+sudo journalctl -u sentinel-frontend -f
+
+# Enable auto-start on boot
+sudo systemctl enable sentinel-backend
+sudo systemctl enable sentinel-frontend
+```
+
+**Service Files:**
+- Backend: `/etc/systemd/system/sentinel-backend.service`
+- Frontend: `/etc/systemd/system/sentinel-frontend.service`
+
+### Docker Deployment
+
+Sentinel Dashboard can also be deployed using Docker:
+
+**Quick Start:**
+```bash
+cd docker
+docker-compose up -d
+```
+
+**Services:**
+- Backend API: `http://localhost:3010`
+- Frontend UI: `http://localhost:8080`
+
+For detailed Docker deployment instructions, see [docker/README.md](docker/README.md).
+
+### Uninstallation
+
+To remove Sentinel Dashboard:
+
+```bash
+sudo ./uninstall.sh
+```
+
+This will:
+- Stop and disable systemd services
+- Remove installation files from `/opt/sentinel`
+- Optionally keep ban history and configuration (prompted)
+
 ## Project Structure
 
 ```
@@ -99,6 +192,14 @@ sentinel-view/
 ├── backend/               # Node.js backend API
 │   ├── src/              # Backend source code
 │   └── scripts/           # Whitelisted bash scripts
+├── deployment/            # Deployment files
+│   └── systemd/          # Systemd service files
+├── docker/               # Docker deployment files
+│   ├── Dockerfile.backend
+│   ├── Dockerfile.frontend
+│   └── docker-compose.yml
+├── install.sh            # Automated installer script
+├── uninstall.sh          # Uninstallation script
 └── public/                # Static assets
 ```
 

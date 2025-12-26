@@ -1,0 +1,27 @@
+[Unit]
+Description=Sentinel Dashboard Frontend
+After=network.target sentinel-backend.service
+Requires=sentinel-backend.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/sentinel
+Environment="NODE_ENV=production"
+# Serve built frontend with nginx
+ExecStart=/usr/sbin/nginx -g "daemon off;" -c /opt/sentinel/nginx-frontend.conf
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sentinel-frontend
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/sentinel/dist
+
+[Install]
+WantedBy=multi-user.target

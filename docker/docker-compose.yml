@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: sentinel-backend
+    restart: unless-stopped
+    ports:
+      - "3010:3010"
+    environment:
+      - NODE_ENV=production
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=3010
+      - SCRIPTS_DIR=/app/scripts
+      - AUTH_ENABLED=true
+      - AUTH_TOKEN=${AUTH_TOKEN:-change-me-in-production}
+      - AUTH_SECRET=${AUTH_SECRET:-change-me-in-production}
+      - FAIL2BAN_DB=/var/lib/fail2ban/fail2ban.sqlite3
+      - FAIL2BAN_LOG=/var/log/fail2ban.log
+      - CORS_ORIGIN=http://localhost:8080
+    volumes:
+      # Mount fail2ban data (read-only for security)
+      - /var/lib/fail2ban:/var/lib/fail2ban:ro
+      - /var/log/fail2ban.log:/var/log/fail2ban.log:ro
+      # Mount scripts directory if needed
+      - ../backend/scripts:/app/scripts:ro
+      # Optional: mount config
+      - ./backend.env:/app/.env:ro
+    networks:
+      - sentinel-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3010/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: sentinel-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - sentinel-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Optional: Reverse proxy (nginx) for production
+  # Uncomment if you want a single entry point
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: sentinel-nginx
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+  #   depends_on:
+  #     - frontend
+  #     - backend
+  #   networks:
+  #     - sentinel-network
+
+networks:
+  sentinel-network:
+    driver: bridge
+
