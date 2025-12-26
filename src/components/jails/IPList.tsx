@@ -97,9 +97,9 @@ export function IPList({ ips, jailName, onUnban }: IPListProps) {
                       Confirm Unban
                     </AlertDialogTitle>
                     <AlertDialogDescription className="font-mono text-muted-foreground">
-                      Are you sure you want to unban{" "}
-                      <code className="text-primary">{banned.ip}</code> from{" "}
-                      <code className="text-secondary">{jailName}</code>?
+                      Are you sure you want to unban IP{" "}
+                      <code className="text-primary font-semibold">{banned.ip}</code> from jail{" "}
+                      <code className="text-secondary font-semibold">{jailName}</code>?
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

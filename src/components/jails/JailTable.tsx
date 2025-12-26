@@ -76,7 +76,9 @@ export function JailTable({
             const isExpanded = expandedJails.has(jail.name);
             // Debug logging for jails with active bans
             if ((jail.active_bans?.count ?? jail.currently_banned ?? 0) > 0) {
-              console.log(`[JailTable] ${jail.name}: active_bans=`, jail.active_bans, 'currently_banned=', jail.currently_banned, 'bannedIPs=', jail.bannedIPs);
+              if (process.env.NODE_ENV === 'development') {
+                console.log(`[JailTable] ${jail.name}: active_bans=`, jail.active_bans, 'currently_banned=', jail.currently_banned);
+              }
             }
             return (
               <Fragment key={jail.name}>
@@ -190,12 +192,6 @@ export function JailTable({
                           {jail.active_bans?.ips && jail.active_bans.ips.length > 0 ? (
                             <IPList
                               ips={jail.active_bans.ips.map(ip => ({ ip, bannedAt: '', banCount: 1 }))}
-                              jailName={jail.name}
-                              onUnban={onUnbanIP}
-                            />
-                          ) : (jail.bannedIPs && jail.bannedIPs.length > 0) ? (
-                            <IPList
-                              ips={jail.bannedIPs}
                               jailName={jail.name}
                               onUnban={onUnbanIP}
                             />
