@@ -71,14 +71,19 @@ class ApiClient {
       ...config?.headers,
     };
 
-    // Add authorization header if token is available
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+    // Authentication: Try cookie first (HttpOnly), fallback to Authorization header for cross-site
+    // Check if we have a token in sessionStorage (fallback for cross-site scenarios)
+    const fallbackToken = typeof window !== 'undefined' ? sessionStorage.getItem('authToken') : null;
+    if (fallbackToken) {
+      headers['Authorization'] = `Bearer ${fallbackToken}`;
     }
+    // Note: Cookies are automatically included via credentials: 'include'
+    // But in cross-site scenarios, cookies may be blocked, so we use Authorization header as fallback
 
     const requestConfig: RequestInit = {
       method,
       headers,
+      credentials: 'include', // Include cookies for authentication
       ...config,
     };
 

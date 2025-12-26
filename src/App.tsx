@@ -8,7 +8,9 @@ import Jails from "./pages/Jails";
 import JailEditor from "./pages/JailEditor";
 import CreateFilter from "./pages/CreateFilter";
 import LiveLog from "./pages/LiveLog";
+import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -20,11 +22,51 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/jails" element={<Jails />} />
-            <Route path="/jail-editor/:name" element={<JailEditor />} />
-            <Route path="/filters/create" element={<CreateFilter />} />
-            <Route path="/logs" element={<LiveLog />} />
+            {/* Public route - login page */}
+            <Route path="/login" element={<Login />} />
+            
+            {/* Protected routes - require authentication */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jails"
+              element={
+                <ProtectedRoute>
+                  <Jails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jail-editor/:name"
+              element={
+                <ProtectedRoute>
+                  <JailEditor />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/filters/create"
+              element={
+                <ProtectedRoute>
+                  <CreateFilter />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/logs"
+              element={
+                <ProtectedRoute>
+                  <LiveLog />
+                </ProtectedRoute>
+              }
+            />
+            
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -69,26 +69,37 @@ const corsOptions = {
     
     // Strict origin validation (SERVER_HOST=127.0.0.1)
     // In production with strict binding, require origin
+    // BUT: Allow requests without origin (e.g., Postman, curl)
     if (!origin) {
-      return callback(new Error('CORS: Origin header required in production'));
+      // Allow requests without origin (same-origin requests, Postman, etc.)
+      return callback(null, true);
     }
     
     // Check if origin is allowed
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error(`CORS: Origin ${origin} is not allowed`));
+      // In production, log but allow if LAN access is enabled
+      if (config.serverHost === '0.0.0.0') {
+        // LAN access enabled - allow all origins
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: Origin ${origin} is not allowed`));
+      }
     }
   },
   
   // Allowed HTTP methods
-  methods: ['GET', 'POST', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   
   // Allowed headers
   allowedHeaders: [
     'Authorization',
     'Content-Type',
     'X-API-Version',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
   ],
   
   // Exposed headers (available to frontend)
@@ -99,7 +110,7 @@ const corsOptions = {
     'X-RateLimit-Reset',
   ],
   
-  // Allow credentials (cookies, authorization headers)
+  // Allow credentials (cookies, authorization headers) - CRITICAL for cookie auth
   credentials: true,
   
   // Cache preflight requests for 24 hours

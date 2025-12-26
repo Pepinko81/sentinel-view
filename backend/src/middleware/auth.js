@@ -1,42 +1,224 @@
-const config = require('../config/config');
+const jwt = require('jsonwebtoken');
+const env = require('../config/env');
 
 /**
- * Bearer token authentication middleware
- * Expects: Authorization: Bearer <token>
+ * JWT-based authentication middleware with cookie support
+ * Supports:
+ * - HttpOnly cookies for token storage
+ * - IP allowlist bypass (AUTH_ALLOW_IPS)
+ * - 24h token expiration
  */
-function authenticate(req, res, next) {
-  const authHeader = req.headers.authorization;
+
+// Generate JWT token
+function generateToken(payload) {
+  return jwt.sign(
+    payload,
+    env.AUTH_SECRET,
+    { expiresIn: '24h' }
+  );
+}
+
+// Verify JWT token
+function verifyToken(token) {
+  try {
+    return jwt.verify(token, env.AUTH_SECRET);
+  } catch (err) {
+    return null;
+  }
+}
+
+// Get client IP address
+function getClientIP(req) {
+  return (
+    req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+    req.headers['x-real-ip'] ||
+    req.connection?.remoteAddress ||
+    req.socket?.remoteAddress ||
+    req.ip ||
+    'unknown'
+  );
+}
+
+/**
+ * Main authentication middleware
+ * Checks for token in:
+ * 1. HttpOnly cookie (preferred)
+ * 2. Authorization Bearer header (fallback)
+ */
+function requireAuth(req, res, next) {
+  // If auth is disabled, skip
+  if (!env.AUTH_ENABLED) {
+    return next();
+  }
+
+  // Check IP allowlist bypass
+  const clientIP = getClientIP(req);
+  if (env.AUTH_ALLOW_IPS.length > 0 && env.isIPAllowed(clientIP, env.AUTH_ALLOW_IPS)) {
+    // IP is in allowlist - bypass auth
+    return next();
+  }
+
+  // Get token from cookie (preferred) or Authorization header (fallback)
+  let token = req.cookies?.authToken || req.cookies?.token;
   
-  if (!authHeader) {
+  if (!token) {
+    // Try Authorization header as fallback
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+  }
+
+  if (!token) {
     return res.status(401).json({
       error: 'Authentication required',
       code: 'AUTH_REQUIRED',
     });
   }
-  
-  // Extract token from "Bearer <token>" format
-  const parts = authHeader.split(' ');
-  
-  if (parts.length !== 2 || parts[0] !== 'Bearer') {
+
+  // Verify token
+  const decoded = verifyToken(token);
+  if (!decoded) {
     return res.status(401).json({
-      error: 'Invalid authorization format. Expected: Bearer <token>',
-      code: 'AUTH_INVALID_FORMAT',
-    });
-  }
-  
-  const token = parts[1];
-  
-  if (!token || token !== config.authToken) {
-    return res.status(401).json({
-      error: 'Invalid authentication token',
+      error: 'Invalid or expired token',
       code: 'AUTH_INVALID_TOKEN',
     });
   }
-  
+
+  // Attach user info to request
+  req.user = decoded;
   next();
 }
 
-module.exports = {
-  authenticate,
-};
+/**
+ * Login handler - validates password and sets cookie
+ */
+function handleLogin(req, res) {
+  const { password } = req.body;
 
+  if (!password) {
+    return res.status(400).json({
+      error: 'Password is required',
+      code: 'PASSWORD_REQUIRED',
+    });
+  }
+
+  // Validate password against AUTH_TOKEN
+  if (password !== env.AUTH_TOKEN) {
+    return res.status(401).json({
+      error: 'Invalid password',
+      code: 'AUTH_INVALID_PASSWORD',
+    });
+  }
+
+  // Generate token
+  const token = generateToken({
+    authenticated: true,
+    timestamp: Date.now(),
+  });
+
+  // In cross-site scenarios without HTTPS, cookies with sameSite: 'lax' are blocked
+  // Solution: Don't set cookie in cross-site HTTP scenarios, use Authorization header instead
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isHTTPS = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https';
+  const origin = req.headers.origin;
+  const host = req.get('host');
+  
+  // Determine if this is a same-origin request
+  let isSameOrigin = false;
+  if (origin && host) {
+    const originHost = new URL(origin).host;
+    const requestHost = host.split(':')[0]; // Remove port if present
+    isSameOrigin = originHost === host || originHost === requestHost;
+  }
+  
+  // Only set cookie if:
+  // 1. HTTPS (can use sameSite: 'none' with secure: true) - works cross-site
+  // 2. Same origin (can use sameSite: 'lax') - works same-site
+  // In cross-site HTTP scenarios, skip cookie and rely on Authorization header only
+  if (isHTTPS || isSameOrigin) {
+    res.cookie('authToken', token, {
+      httpOnly: true,
+      secure: isHTTPS || isProduction,
+      sameSite: isHTTPS ? 'none' : 'lax', // 'none' for cross-site HTTPS, 'lax' for same-site
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      path: '/',
+      domain: undefined,
+    });
+  }
+  
+  // ALWAYS return token in response body
+  // Frontend will use this in Authorization header (required for cross-site HTTP scenarios)
+  return res.json({
+    success: true,
+    message: 'Authentication successful',
+    token: token, // Token for Authorization header (required for cross-site HTTP)
+  });
+}
+
+/**
+ * Logout handler - clears cookie
+ */
+function handleLogout(req, res) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.clearCookie('authToken', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax',
+    path: '/',
+    domain: undefined,
+  });
+
+  return res.json({
+    success: true,
+    message: 'Logged out successfully',
+  });
+}
+
+/**
+ * Check auth status
+ */
+function checkAuth(req, res) {
+  if (!env.AUTH_ENABLED) {
+    return res.json({ authenticated: false, authEnabled: false });
+  }
+
+  const clientIP = getClientIP(req);
+  const isIPAllowed = env.AUTH_ALLOW_IPS.length > 0 && 
+                      env.isIPAllowed(clientIP, env.AUTH_ALLOW_IPS);
+
+  if (isIPAllowed) {
+    return res.json({ authenticated: true, authEnabled: true, bypass: 'ip' });
+  }
+
+  // Check for token in cookie first, then Authorization header
+  let token = req.cookies?.authToken || req.cookies?.token;
+  
+  if (!token) {
+    // Try Authorization header (required for cross-site scenarios)
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+  }
+
+  if (!token) {
+    return res.json({ authenticated: false, authEnabled: true });
+  }
+
+  const decoded = verifyToken(token);
+  if (!decoded) {
+    return res.json({ authenticated: false, authEnabled: true });
+  }
+
+  return res.json({ authenticated: true, authEnabled: true });
+}
+
+module.exports = {
+  requireAuth,
+  handleLogin,
+  handleLogout,
+  checkAuth,
+  generateToken,
+  verifyToken,
+};

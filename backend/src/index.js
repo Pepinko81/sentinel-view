@@ -3,13 +3,16 @@ const http = require('http');
 const { WebSocketServer } = require('ws');
 const cors = require('cors');
 const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
 const config = require('./config/config');
+const env = require('./config/env');
 const corsOptions = require('./config/cors');
-const { authenticate } = require('./middleware/auth');
+const { requireAuth } = require('./middleware/auth');
 const { errorHandler } = require('./middleware/errorHandler');
 const { performanceMonitor } = require('./middleware/performance');
 const { apiLimiter, backupLimiter } = require('./middleware/rateLimiter');
 const healthRoutes = require('./routes/health');
+const authRoutes = require('./routes/auth');
 const apiRoutes = require('./routes');
 const { streamFail2banLog, killAllTailProcesses } = require('./services/logStream');
 
@@ -19,10 +22,17 @@ config.validate();
 const app = express();
 
 // Security middleware
-app.use(helmet());
+// Configure helmet to allow credentials for CORS
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: false,
+}));
 
 // CORS configuration (secure, explicit origins)
 app.use(cors(corsOptions));
+
+// Cookie parser middleware (for JWT cookies)
+app.use(cookieParser());
 
 // Body parsing middleware
 app.use(express.json());
@@ -40,10 +50,26 @@ app.use('/api', apiLimiter);
 // Health check endpoint (no auth required, comprehensive status)
 app.use('/health', healthRoutes);
 
-// API routes (require authentication)
-// TEMPORARILY DISABLED FOR TESTING - REMOVE THIS COMMENT TO RE-ENABLE
-// app.use('/api', authenticate, apiRoutes);
-app.use('/api', apiRoutes);
+// Root endpoint (no auth required)
+app.get('/', (req, res) => {
+  res.json({ message: 'Sentinel Dashboard API', version: '1.0.0' });
+});
+
+// Auth routes (login, logout, status check) - no auth required
+// Mount directly before requireAuth middleware
+const { handleLogin, handleLogout, checkAuth } = require('./middleware/auth');
+app.post('/api/login', handleLogin);
+app.post('/api/logout', handleLogout);
+app.get('/api/auth/status', checkAuth);
+
+// API routes (require authentication if enabled)
+if (env.AUTH_ENABLED) {
+  // Apply auth middleware to all /api routes (auth routes already handled above)
+  app.use('/api', requireAuth, apiRoutes);
+} else {
+  // Auth disabled - allow all requests
+  app.use('/api', apiRoutes);
+}
 
 // 404 handler
 app.use((req, res) => {
@@ -99,7 +125,10 @@ const SERVER_HOST = config.serverHost;
 server.listen(PORT, SERVER_HOST, () => {
   console.log(`🚀 Sentinel Backend API running on ${SERVER_HOST}:${PORT}`);
   console.log(`📊 Environment: ${config.nodeEnv}`);
-  console.log(`🔒 Authentication: DISABLED (TEMPORARY - FOR TESTING)`);
+  console.log(`🔒 Authentication: ${env.AUTH_ENABLED ? 'ENABLED' : 'DISABLED'}`);
+  if (env.AUTH_ENABLED && env.AUTH_ALLOW_IPS.length > 0) {
+    console.log(`   IP Allowlist: ${env.AUTH_ALLOW_IPS.join(', ')}`);
+  }
   console.log(`🌐 CORS: ${config.nodeEnv === 'production' ? `Strict (${config.corsOrigin})` : 'Permissive (LAN access enabled)'}`);
   console.log(`🔧 WebSocket: ws://${SERVER_HOST}:${PORT}/ws/logs`);
   
@@ -108,6 +137,11 @@ server.listen(PORT, SERVER_HOST, () => {
   }
   
   console.log(`\n📝 API Endpoints:`);
+  if (env.AUTH_ENABLED) {
+    console.log(`   POST /api/login (authentication)`);
+    console.log(`   POST /api/logout (logout)`);
+    console.log(`   GET  /api/auth/status (check auth status)`);
+  }
   console.log(`   GET  /api/jails`);
   console.log(`   GET  /api/jails/:name`);
   console.log(`   POST /api/jails/:name/start`);
