@@ -1,6 +1,33 @@
 # Sentinel Dashboard
 
-Fail2Ban Web Dashboard – Server Security Monitor
+<div align="center">
+
+![Sentinel Dashboard Logo](logo.png)
+
+**Fail2Ban Web Dashboard – Server Security Monitor**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/Pepinko81/sentinel-view/releases)
+
+*A modern, production-ready web interface for monitoring and managing fail2ban security configurations*
+
+</div>
+
+---
+
+## Why Sentinel?
+
+**Sentinel Dashboard** is a comprehensive, production-ready solution for monitoring and managing your fail2ban security infrastructure. Whether you're running a single server or managing multiple systems, Sentinel provides:
+
+- **🔍 Real-Time Monitoring**: See active bans, jail status, and security events as they happen
+- **🛡️ Centralized Management**: Control all your fail2ban jails from a single, intuitive interface
+- **📊 Security Insights**: Track ban patterns, identify threats, and analyze security trends
+- **⚡ Production Ready**: Automated installation, systemd services, Docker support, and enterprise-grade security
+- **🔐 Secure by Default**: JWT authentication, rate limiting, IP allowlists, and brute force protection
+
+Perfect for system administrators, DevOps teams, and security professionals who need a reliable, secure way to monitor and manage fail2ban across their infrastructure.
+
+---
 
 > **⚠️ SECURITY NOTICE**: This application requires system-level access to fail2ban and may execute privileged commands. 
 > - Always use strong authentication tokens
@@ -8,8 +35,6 @@ Fail2Ban Web Dashboard – Server Security Monitor
 > - Review and restrict script execution permissions
 > - Keep dependencies updated
 > - Do not expose to public internet without proper security measures
-
-A comprehensive web-based dashboard for monitoring and managing fail2ban security configurations, active bans, and server security metrics.
 
 ## Project Overview
 
@@ -205,25 +230,96 @@ sentinel-view/
 
 ## Features
 
-- 🔒 **Real-time Security Monitoring**: Monitor active bans and jail status
+### Core Features
+- 🔒 **Real-time Security Monitoring**: Monitor active bans and jail status in real-time
 - 📊 **Comprehensive Dashboard**: Overview of all jails, bans, and system metrics
-- 🛡️ **Jail Management**: Start, stop, and configure fail2ban jails
-- 📈 **Ban History**: View historical ban events and patterns
-- ⚡ **Fast & Responsive**: Optimized for performance with caching
-- 🔐 **Secure API**: Token-based authentication and whitelisted script execution
+- 🛡️ **Jail Management**: Start, stop, and configure fail2ban jails from the UI
+- 📈 **Ban History**: View historical ban events and patterns with detailed filtering
+- 🚫 **IP Unban**: Quickly unban IP addresses from any jail
+- 📝 **Live Log Streaming**: Real-time fail2ban log streaming via WebSocket
+- 🔧 **Filter Management**: Create and manage fail2ban filters through the UI
+- ⚡ **Fast & Responsive**: Optimized for performance with intelligent caching
+
+### Security Features
+- 🔐 **JWT Authentication**: Secure token-based authentication with rotation
+- 🔄 **Refresh Tokens**: Long-lived refresh tokens with automatic renewal
+- 🛡️ **Rate Limiting**: Fail2ban-style rate limiting (login: 5/10min, API: 100/min)
+- 🚫 **Brute Force Protection**: Automatic account lockout after failed attempts
+- 🌐 **IP Allowlist**: Optional IP-based access control
+- 🔒 **WebSocket Authentication**: Secure log streaming with token verification
+- 🚨 **Security Logging**: Comprehensive security event logging
+
+### Deployment Features
+- 📦 **Automated Installer**: One-command installation for Ubuntu/Debian
+- 🔧 **Systemd Services**: Production-ready systemd service files
+- 🐳 **Docker Support**: Complete Docker deployment with docker-compose
+- 🔄 **Easy Updates**: Simple update process with backup support
+- 🗑️ **Clean Uninstall**: Removal script with optional data backup
+
+## Security
+
+Sentinel Dashboard implements multiple layers of security:
+
+### Authentication & Authorization
+- **JWT Tokens**: Short-lived access tokens (1 hour) with automatic rotation
+- **Refresh Tokens**: Long-lived refresh tokens (7 days) stored in HttpOnly cookies
+- **Password Protection**: Secure password-based authentication
+- **IP Allowlist**: Optional IP-based access control for additional security
+
+### Rate Limiting
+- **Login Endpoint**: 5 attempts per 10 minutes (configurable)
+- **API Endpoints**: 100 requests per minute per IP (configurable)
+- **Brute Force Protection**: Automatic lockout after 5 failed attempts (15-minute lockout)
+
+### Network Security
+- **CORS Protection**: Configurable CORS origins
+- **IP Allowlist**: Block all non-allowlisted IPs (optional)
+- **WebSocket Authentication**: All WebSocket connections require valid tokens
+
+### Best Practices
+- Always use strong, unique passwords and tokens
+- Enable IP allowlist in production environments
+- Use HTTPS in production
+- Regularly update dependencies
+- Review and restrict script execution permissions
+- Monitor security logs regularly
+
+For detailed security configuration, see `backend/.env.example`.
 
 ## Documentation
 
 - **Backend API**: See `backend/README.md` for detailed API documentation
 - **Configuration**: See `backend/docs/ENVIRONMENT-CONFIG.md` for environment setup
+- **Deployment**: See `docs/DEPLOYMENT.md` for deployment guides
+- **Docker**: See `docker/README.md` for Docker deployment instructions
 
 ## Contributing
 
+We welcome contributions! Please follow these steps:
+
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes
-4. Submit a pull request
+4. Commit your changes (`git commit -m 'Add some amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Built with [React](https://reactjs.org/), [TypeScript](https://www.typescriptlang.org/), and [Node.js](https://nodejs.org/)
+- UI components from [shadcn/ui](https://ui.shadcn.com/)
+- Icons from [Lucide](https://lucide.dev/)
+
+---
+
+<div align="center">
+
+**Sentinel Dashboard v2.0.0** - Production Ready
+
+[Report Bug](https://github.com/Pepinko81/sentinel-view/issues) · [Request Feature](https://github.com/Pepinko81/sentinel-view/issues)
+
+</div>
