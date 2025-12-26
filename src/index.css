@@ -197,4 +197,18 @@
   .status-offline {
     @apply bg-destructive;
   }
+
+  /* Logo dark mode switching */
+  img.dark-logo {
+    display: none;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    img.light-logo {
+      display: none;
+    }
+    img.dark-logo {
+      display: block;
+    }
+  }
 }

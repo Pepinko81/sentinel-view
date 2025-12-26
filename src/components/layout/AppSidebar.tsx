@@ -1,5 +1,7 @@
-import { LayoutDashboard, Shield, Terminal, FileText, FileCode, Radio } from "lucide-react";
+import { LayoutDashboard, Shield, FileText, FileCode, Radio } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import Logo from "@/assets/pepinko-logo.png";
+import LogoDark from "@/assets/pepinko-logo-dark.png";
 import {
   Sidebar,
   SidebarContent,
@@ -31,16 +33,23 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-border">
       <SidebarHeader className="border-b border-border p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded bg-primary/20 terminal-border-glow">
-            <Terminal className="h-4 w-4 text-primary" />
-          </div>
+          <img
+            src={Logo}
+            alt="Sentinel Dashboard"
+            className="light-logo h-8 w-8 shrink-0 object-contain"
+          />
+          <img
+            src={LogoDark}
+            alt="Sentinel Dashboard"
+            className="dark-logo h-8 w-8 shrink-0 object-contain"
+          />
           {!isCollapsed && (
             <div className="flex flex-col">
               <span className="font-mono text-sm font-semibold text-primary terminal-glow">
-                FAIL2BAN
+                Sentinel Dashboard
               </span>
               <span className="font-mono text-xs text-muted-foreground">
-                monitor v2.0
+                Fail2Ban Monitor
               </span>
             </div>
           )}
