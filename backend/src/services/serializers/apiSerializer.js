@@ -90,12 +90,25 @@ function serializeJail(jail) {
         ? jail.bannedIPs.map(ip => (typeof ip === 'string' ? ip : ip.ip))
         : []);
   
+  // Extract IPs from bannedIPs array (could be strings or objects)
+  const activeBannedIPs = Array.isArray(jail.bannedIPs)
+    ? jail.bannedIPs.map(ip => (typeof ip === 'string' ? ip : ip.ip))
+    : bannedIpsRaw;
+  
   return {
     name: String(jail.name || ''),
     enabled: Boolean(jail.enabled),
-    // Structured list used by frontend
+    // Frontend expects active_bans and historical_bans structure
+    active_bans: {
+      count: currentlyBanned,
+      ips: activeBannedIPs,
+    },
+    historical_bans: {
+      total: totalBanned !== undefined ? totalBanned : null,
+    },
+    // Structured list used by frontend (backward compatibility)
     bannedIPs: bannedIPs,
-    // API contract fields - explicit semantics
+    // API contract fields - explicit semantics (backward compatibility)
     currently_banned: currentlyBanned, // Runtime active bans (used in UI)
     banned_ips: bannedIpsRaw, // Active banned IP addresses
     total_banned: totalBanned, // Historical total (optional, informational)
