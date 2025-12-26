@@ -539,7 +539,7 @@ sudo journalctl -u fail2ban -n 50
 
 **Solution:**
 1. Verify backend is running: `curl http://localhost:3010/health`
-2. Check port is not in use: `lsof -i :3001`
+2. Check port is not in use: `lsof -i :3010`
 3. Verify firewall allows localhost connections
 4. Check `VITE_API_URL` in frontend `.env.local`
 
