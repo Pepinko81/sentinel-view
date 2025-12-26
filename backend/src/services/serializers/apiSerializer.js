@@ -71,12 +71,21 @@ function serializeJail(jail) {
 
   // Derive banned counts with explicit semantics
   // currently_banned: runtime active bans (source of truth for UI)
+  // If we have IPs but no count, use IP count as fallback
+  const activeBannedIPsCount = Array.isArray(jail.bannedIPs) 
+    ? jail.bannedIPs.length 
+    : (Array.isArray(jail.banned_ips) ? jail.banned_ips.length : 0);
+  
   const currentlyBanned =
-    typeof jail.currently_banned === 'number'
+    typeof jail.currently_banned === 'number' && jail.currently_banned > 0
       ? jail.currently_banned
-      : (typeof jail.banned_count === 'number'
-          ? jail.banned_count
-          : (typeof jail.bannedCount === 'number' ? jail.bannedCount : 0));
+      : (typeof jail.bans_active === 'number' && jail.bans_active > 0
+          ? jail.bans_active
+          : (typeof jail.banned_count === 'number' && jail.banned_count > 0
+              ? jail.banned_count
+              : (typeof jail.bannedCount === 'number' && jail.bannedCount > 0
+                  ? jail.bannedCount
+                  : (activeBannedIPsCount > 0 ? activeBannedIPsCount : 0))));
 
   // total_banned: historical total (optional, informational)
   const totalBanned =

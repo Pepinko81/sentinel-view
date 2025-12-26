@@ -184,11 +184,13 @@ function parseJailStatus(output, jailName) {
   // Track banned counts: "Currently banned" (runtime) and "Total banned" (historical)
   let currentlyBannedCount = 0;
   let totalBannedCount = null; // Optional, informational only
-  let bannedIPListLine = null;
+  let bannedIPListLineIndex = -1;
   let sawCurrentlyLine = false;
   let parsedCurrentlyLine = false;
   
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
     // Parse "Currently banned" - THIS IS THE SOURCE OF TRUTH for active bans
     // Format: "Currently banned:\t1" or "Currently banned: 1"
     if (line.toLowerCase().includes('currently banned')) {
@@ -258,36 +260,88 @@ function parseJailStatus(output, jailName) {
     
     // Parse "Banned IP list" - extract IP addresses
     // Format: "Banned IP list:\t66.249.79.1" or "`- Banned IP list: 66.249.79.1"
+    // Or IPs might be on subsequent lines
     if (line.toLowerCase().includes('banned ip list')) {
-      bannedIPListLine = line;
+      bannedIPListLineIndex = i;
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[JAIL PARSER] ${jailName}: Found Banned IP list line at index ${i}: "${line}"`);
+      }
     }
   }
   
-  // Parse banned IP list if found
-  if (bannedIPListLine) {
-    // Remove leading symbols (|, -, `, spaces, tabs)
-    const cleaned = bannedIPListLine.replace(/^[`|\-|\s\t]+/, '').trim();
-    // Match: "Banned IP list:" followed by tab/space/colon and IPs (whitespace-separated)
-    const match = cleaned.match(/banned\s+ip\s+list[:\s\t]+(.+)/i);
+  // Parse banned IP list if found - check the line itself and subsequent lines
+  if (bannedIPListLineIndex >= 0) {
+    const extractedIPs = [];
     
-    if (match && match[1]) {
-      const ipListStr = match[1].trim();
-      
-      // Extract IPs - handle whitespace-separated list (spaces/tabs)
+    // First, try to extract IPs from the "Banned IP list" line itself
+    const bannedIPListLine = lines[bannedIPListLineIndex];
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[JAIL PARSER] ${jailName}: Original line: "${bannedIPListLine}"`);
+    }
+    
+    // More flexible matching - handle various formats:
+    // "Banned IP list:\tIP1 IP2 ..." or "`- Banned IP list: IP1 IP2 ..." or "Banned IP list: IP1 IP2 ..."
+    // Find the position of "Banned IP list" and extract everything after the colon
+    const bannedIPListMatch = bannedIPListLine.match(/banned\s+ip\s+list\s*[:]\s*(.+)/i);
+    
+    if (bannedIPListMatch && bannedIPListMatch[1]) {
+      const ipListStr = bannedIPListMatch[1].trim();
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[JAIL PARSER] ${jailName}: IP list string: "${ipListStr}"`);
+      }
+      // Extract IPs directly from the string (extractIPs handles the parsing)
       if (ipListStr && ipListStr.length > 0) {
-        const ipParts = ipListStr.split(/\s+/);
-        const extractedIPs = [];
-        
-        for (const part of ipParts) {
-          const ips = extractIPs(part.trim());
+        const ips = extractIPs(ipListStr);
+        if (ips.length > 0) {
           extractedIPs.push(...ips);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[JAIL PARSER] ${jailName}: Extracted ${ips.length} IPs: ${ips.join(', ')}`);
+          }
+        } else {
+          // Fallback: try splitting by whitespace and extracting from each part
+          const ipParts = ipListStr.split(/\s+/);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[JAIL PARSER] ${jailName}: Fallback - split into ${ipParts.length} parts`);
+          }
+          for (const part of ipParts) {
+            const partIPs = extractIPs(part.trim());
+            if (partIPs.length > 0) {
+              extractedIPs.push(...partIPs);
+            }
+          }
         }
-        
-        result.bannedIPs = [...new Set(extractedIPs)];
-        
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`[JAIL PARSER] ${jailName}: Extracted ${result.bannedIPs.length} IPs from Banned IP list`);
-        }
+      }
+    } else {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`[JAIL PARSER] ${jailName}: Failed to match IP list pattern in line: "${bannedIPListLine}"`);
+      }
+    }
+    
+    // Also check subsequent lines for IP addresses (they might be on separate lines)
+    // Continue until we hit a non-IP line or another section
+    for (let i = bannedIPListLineIndex + 1; i < lines.length; i++) {
+      const nextLine = lines[i].trim();
+      
+      // Stop if we hit another section (starts with a keyword like "Filter:", "Currently banned:", etc.)
+      if (nextLine.match(/^(filter|currently|total|max|ban|find)/i)) {
+        break;
+      }
+      
+      // Extract IPs from this line
+      const ips = extractIPs(nextLine);
+      if (ips.length > 0) {
+        extractedIPs.push(...ips);
+      } else if (nextLine.length > 0 && !nextLine.match(/^[`|\-|\s\t]*$/)) {
+        // If line has content but no IPs, we've probably moved to next section
+        break;
+      }
+    }
+    
+    if (extractedIPs.length > 0) {
+      result.bannedIPs = [...new Set(extractedIPs)];
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[JAIL PARSER] ${jailName}: Extracted ${result.bannedIPs.length} IPs from Banned IP list`);
       }
     }
   }

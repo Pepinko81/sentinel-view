@@ -74,6 +74,10 @@ export function JailTable({
         <tbody>
           {jails.map((jail) => {
             const isExpanded = expandedJails.has(jail.name);
+            // Debug logging for jails with active bans
+            if ((jail.active_bans?.count ?? jail.currently_banned ?? 0) > 0) {
+              console.log(`[JailTable] ${jail.name}: active_bans=`, jail.active_bans, 'currently_banned=', jail.currently_banned, 'bannedIPs=', jail.bannedIPs);
+            }
             return (
               <Fragment key={jail.name}>
                 <tr

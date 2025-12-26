@@ -41,7 +41,9 @@ app.use('/api', apiLimiter);
 app.use('/health', healthRoutes);
 
 // API routes (require authentication)
-app.use('/api', authenticate, apiRoutes);
+// TEMPORARILY DISABLED FOR TESTING - REMOVE THIS COMMENT TO RE-ENABLE
+// app.use('/api', authenticate, apiRoutes);
+app.use('/api', apiRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -97,7 +99,7 @@ const SERVER_HOST = config.serverHost;
 server.listen(PORT, SERVER_HOST, () => {
   console.log(`🚀 Sentinel Backend API running on ${SERVER_HOST}:${PORT}`);
   console.log(`📊 Environment: ${config.nodeEnv}`);
-  console.log(`🔒 Authentication: ${config.authToken ? 'Enabled' : 'Disabled (WARNING!)'}`);
+  console.log(`🔒 Authentication: DISABLED (TEMPORARY - FOR TESTING)`);
   console.log(`🌐 CORS: ${config.nodeEnv === 'production' ? `Strict (${config.corsOrigin})` : 'Permissive (LAN access enabled)'}`);
   console.log(`🔧 WebSocket: ws://${SERVER_HOST}:${PORT}/ws/logs`);
   

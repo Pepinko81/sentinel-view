@@ -139,11 +139,41 @@ async function getGlobalStatus() {
  * @param {string} jail - Jail name
  * @returns {Promise<object>}
  */
+/**
+ * Get jail status from fail2ban CLI
+ * @param {string} jail - Jail name
+ * @returns {Promise<object>} - Jail status with activeBans, bannedIPs, totalBans, isActive
+ */
 async function getJailStatus(jail) {
   validateJailName(jail);
-  const { stdout } = await execFail2banClient(['status', jail], 10000);
-  const parsed = parseJailStatus(stdout, jail);
-  return parsed;
+  
+  try {
+    const { stdout } = await execFail2banClient(['status', jail], 10000);
+    const parsed = parseJailStatus(stdout, jail);
+    
+    console.debug(`[BAN PARSER] fetched: ${jail}, activeBans: ${parsed.currentlyBanned || 0}`);
+    
+    // Return in expected schema format with backward compatibility
+    return {
+      jail: jail,
+      activeBans: parsed.currentlyBanned || 0,
+      bannedIPs: parsed.bannedIPs || [],
+      totalBans: parsed.totalBanned || null,
+      isActive: parsed.enabled || false,
+      // Keep backward compatibility fields
+      currentlyBanned: parsed.currentlyBanned || 0,
+      totalBanned: parsed.totalBanned || null,
+      enabled: parsed.enabled || false,
+      filter: parsed.filter || null,
+      maxRetry: parsed.maxRetry || null,
+      banTime: parsed.banTime || null,
+      findTime: parsed.findTime || null,
+      lastBan: parsed.lastBan || null,
+    };
+  } catch (err) {
+    console.error(`[BAN PARSER] Error getting jail status for ${jail}: ${err.message}`);
+    throw err;
+  }
 }
 
 /**
@@ -966,38 +996,53 @@ async function writeJailConfig(jail, content, targetPath = null) {
 }
 
 /**
- * Get active bans from SQLite database
+ * Get active bans from fail2ban CLI (runtime state)
+ * Uses fail2ban-client status for each active jail to get current banned IPs
  * @returns {Promise<Array<{jail: string, ip: string, timeofban: number, bantime: number}>>}
  */
 async function getActiveBans() {
-  const dbPath = config.fail2ban.db;
-  
-  if (!fs.existsSync(dbPath)) {
-    return [];
-  }
-  
   try {
-    const db = new Database(dbPath, { readonly: true });
-    const now = Math.floor(Date.now() / 1000);
+    // Get list of active jails
+    const globalStatus = await getGlobalStatus();
+    const activeJails = globalStatus.jails || [];
     
-    const query = `
-      SELECT jail, ip, timeofban, bantime 
-      FROM bans 
-      WHERE (timeofban + bantime) > ?
-      ORDER BY timeofban DESC
-    `;
-    
-    const rows = db.prepare(query).all(now);
-    db.close();
-    
-    return rows;
-  } catch (err) {
-    // Handle permission errors gracefully - database might be readable only by root
-    if (err.message && (err.message.includes('unable to open database file') || err.message.includes('EACCES'))) {
-      console.warn(`[F2B] Cannot access database file (permission denied): ${dbPath}. Database may be readable only by root.`);
+    if (activeJails.length === 0) {
+      console.debug('[BAN PARSER] No active jails found');
       return [];
     }
-    console.error(`[F2B] Error reading active bans: ${err.message}`);
+    
+    const allActiveBans = [];
+    
+    // Get status for each active jail
+    for (const jail of activeJails) {
+      try {
+        validateJailName(jail);
+        const jailStatus = await getJailStatus(jail);
+        
+        if (jailStatus.bannedIPs && jailStatus.bannedIPs.length > 0) {
+          const activeBans = jailStatus.bannedIPs.length;
+          console.debug(`[BAN PARSER] fetched: ${jail}, activeBans: ${activeBans}`);
+          
+          // Convert to expected format
+          for (const ip of jailStatus.bannedIPs) {
+            allActiveBans.push({
+              jail: jail,
+              ip: typeof ip === 'string' ? ip : ip.ip,
+              timeofban: Math.floor(Date.now() / 1000) - 3600, // Approximate (CLI doesn't provide exact time)
+              bantime: jailStatus.banTime || 3600,
+            });
+          }
+        }
+      } catch (err) {
+        // Skip this jail if status check fails
+        console.warn(`[BAN PARSER] Failed to get status for jail ${jail}: ${err.message}`);
+        continue;
+      }
+    }
+    
+    return allActiveBans;
+  } catch (err) {
+    console.error(`[BAN PARSER] Error getting active bans: ${err.message}`);
     return [];
   }
 }

@@ -30,10 +30,30 @@ router.get('/history', async (req, res, next) => {
     console.log(`[BANS API] GET /api/bans/history - jail: ${jail || 'all'}, limit: ${limit}`);
     const history = await f2b.readBanHistory(jail, limit);
     console.log(`[BANS API] Returning ${history.length} ban history records`);
+    
+    // Convert to frontend format: history -> events, timeofban -> timestamp
+    const events = history.map(record => ({
+      jail: record.jail,
+      ip: record.ip,
+      action: record.action || 'ban',
+      timestamp: record.timeofban 
+        ? new Date(record.timeofban * 1000).toISOString() 
+        : new Date().toISOString(),
+    }));
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[BANS API] Converted ${history.length} records to ${events.length} events`);
+      if (events.length > 0) {
+        console.log(`[BANS API] First event:`, JSON.stringify(events[0], null, 2));
+      }
+    }
+    
     res.json({
       success: true,
-      history,
-      count: history.length,
+      events: events,
+      total: events.length,
+      jail: jail,
+      limit: limit,
     });
   } catch (err) {
     console.error(`[BANS API] Error reading ban history: ${err.message}`);

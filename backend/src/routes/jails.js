@@ -61,6 +61,9 @@ router.get('/', async (req, res, next) => {
       if (isEnabled) {
         try {
           const jailStatus = await f2b.getJailStatus(jailName);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[JAILS API] ${jailName}: currentlyBanned=${jailStatus.currentlyBanned}, bannedIPs=${JSON.stringify(jailStatus.bannedIPs)}`);
+          }
           const rawJail = {
             name: jailName,
             enabled: true,
@@ -75,7 +78,11 @@ router.get('/', async (req, res, next) => {
             maxRetry: jailStatus.maxRetry || null,
             banTime: jailStatus.banTime || null,
           };
-          return serializeJail(rawJail);
+          const serialized = serializeJail(rawJail);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[JAILS API] ${jailName}: serialized active_bans.count=${serialized.active_bans?.count}, active_bans.ips.length=${serialized.active_bans?.ips?.length || 0}`);
+          }
+          return serialized;
         } catch (err) {
           // If jail status fails, but filter exists, still mark as enabled
           const rawJail = {

@@ -35,6 +35,13 @@ export function BanHistory({ selectedJail = null }: BanHistoryProps) {
     staleTime: 30000,
   });
 
+  // Debug logging
+  if (data) {
+    console.log('[BanHistory] Data received:', data);
+    console.log('[BanHistory] Events:', data.events);
+    console.log('[BanHistory] Events length:', data.events?.length || 0);
+  }
+
   const events = data?.events || [];
   const uniqueJails = Array.from(new Set(jails.map((j) => j.name))).sort();
 
