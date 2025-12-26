@@ -64,20 +64,74 @@ router.get('/history', async (req, res, next) => {
 /**
  * POST /api/bans/unban
  * Unban an IP from a jail
+ * 
+ * Request body:
+ *   { "jail": "nginx-hidden-files", "ip": "123.45.67.89" }
+ * 
+ * Validation:
+ *   - jail must be a string and must exist in fail2ban
+ *   - ip must be valid IPv4 or IPv6
+ *   - reject "*" or missing fields
+ *   - if jail is disabled or missing → return error JSON
  */
 router.post('/unban', async (req, res, next) => {
   try {
     const { jail, ip } = req.body;
-    if (!jail || !ip) {
+    
+    // Validate required fields
+    if (!jail || typeof jail !== 'string') {
       return res.status(400).json({
         success: false,
-        error: 'Jail name and IP address are required',
+        error: 'Jail name is required and must be a string',
       });
     }
+    
+    if (!ip || typeof ip !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'IP address is required and must be a string',
+      });
+    }
+    
+    // Reject wildcard or empty values
+    if (jail === '*' || jail.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid jail name: wildcard "*" or empty string not allowed',
+      });
+    }
+    
+    if (ip === '*' || ip.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid IP address: wildcard "*" or empty string not allowed',
+      });
+    }
+    
+    console.log(`[BANS API] POST /api/bans/unban - jail: ${jail}, ip: ${ip}`);
+    
+    // Execute unban
     const result = await f2b.unbanIP(jail, ip);
-    res.json(result);
+    
+    console.log(`[BANS API] Unban successful: ${result.message}`);
+    
+    // Return success response with jail and ip
+    res.json({
+      success: true,
+      jail: jail,
+      ip: ip,
+      message: result.message,
+    });
   } catch (err) {
-    next(err);
+    console.error(`[BANS API] Unban failed: ${err.message}`);
+    
+    // Return error response
+    res.status(400).json({
+      success: false,
+      error: err.message || 'Failed to unban IP',
+      jail: req.body.jail || null,
+      ip: req.body.ip || null,
+    });
   }
 });
 

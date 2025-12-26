@@ -33,17 +33,18 @@ export const useJails = () => {
   const unbanMutation = useMutation({
     mutationFn: ({ jailName, ip }: { jailName: string; ip: string }) =>
       unbanIP(jailName, ip),
-    onSuccess: (response, { ip }) => {
+    onSuccess: (response, { jailName, ip }) => {
+      // Invalidate and refetch only jails query (partial refresh)
       queryClient.invalidateQueries({ queryKey: ["jails"] });
       queryClient.invalidateQueries({ queryKey: ["banHistory"] });
       toast({
         title: "IP Unbanned",
-        description: response.message || `Successfully unbanned ${ip}`,
+        description: response.message || `IP ${ip} unbanned from ${jailName}`,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Error",
+        title: "Unban Failed",
         description: error.message || "Failed to unban IP",
         variant: "destructive",
       });
