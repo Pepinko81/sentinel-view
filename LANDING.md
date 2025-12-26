@@ -1,5 +1,15 @@
 # Sentinel — The Missing Dashboard for Fail2ban
 
+<div align="center">
+
+![Sentinel Dashboard Hero](./screenshots/overview_dashboard.png)
+
+**Stop managing fail2ban from the command line. Get real-time visibility into your security infrastructure with Sentinel.**
+
+</div>
+
+---
+
 ## Marketing Headline
 
 **Stop managing fail2ban from the command line. Get real-time visibility into your security infrastructure with Sentinel.**
@@ -8,11 +18,17 @@
 
 ## Screenshots
 
-![Dashboard Overview](./screenshots/overview.png)
+### Dashboard Overview
+![Dashboard Overview](./screenshots/overview_dashboard.png)
 *Real-time monitoring of all fail2ban jails, active bans, and security metrics*
 
-![Ban Management](./screenshots/bans.png)
+### Active Bans Management
+![Active Bans](./screenshots/active_bans.png)
 *View and manage active bans, ban history, and IP addresses with one click*
+
+### Live Logs Streaming
+![Live Logs](./screenshots/live_logs.png)
+*Stream fail2ban logs in real-time via WebSocket*
 
 ---
 

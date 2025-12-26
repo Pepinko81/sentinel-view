@@ -15,22 +15,38 @@
 
 ---
 
+## Quick Install
+
+```bash
+curl -s https://raw.githubusercontent.com/Pepinko81/sentinel-view/main/install.sh | sudo bash
+```
+
+**After installation:** Access your dashboard at `http://your-server:8080`
+
+---
+
+## Screenshots
+
+<div align="center">
+
+![Dashboard Overview](./screenshots/overview_dashboard.png)
+*Real-time overview of all jails, active bans, and security metrics*
+
+</div>
+
+![Active Bans](./screenshots/active_bans.png)
+*View active bans, ban history, and manage IP addresses with one click*
+
+![Live Logs](./screenshots/live_logs.png)
+*Stream fail2ban logs in real-time via WebSocket*
+
+---
+
 ## Why Sentinel?
 
 Fail2ban is powerful, but monitoring it requires SSH access and command-line expertise. **Sentinel** bridges that gap by providing a beautiful, real-time web dashboard that gives you instant visibility into your security infrastructure.
 
 Whether you're managing a single server or a fleet of systems, Sentinel makes fail2ban monitoring accessible, actionable, and secure.
-
-## Screenshots
-
-![Dashboard Overview](./screenshots/overview.png)
-*Real-time overview of all jails, active bans, and security metrics*
-
-![Ban Management](./screenshots/bans.png)
-*View active bans, ban history, and manage IP addresses with one click*
-
-![Live Logs](./screenshots/logs.png)
-*Stream fail2ban logs in real-time via WebSocket*
 
 ## Features
 
