@@ -519,18 +519,91 @@ async function stopJail(jail) {
 
 /**
  * Unban an IP from a jail
+ * Safe implementation with validation and ignoreNOK behavior
  * @param {string} jail - Jail name
  * @param {string} ip - IP address
- * @returns {Promise<{success: boolean, message: string}>}
+ * @returns {Promise<{success: boolean, jail: string, ip: string, message?: string}>}
  */
 async function unbanIP(jail, ip) {
+  // Validate inputs
+  if (!jail || typeof jail !== 'string') {
+    throw new Error('Jail name is required and must be a string');
+  }
+  
+  if (!ip || typeof ip !== 'string') {
+    throw new Error('IP address is required and must be a string');
+  }
+  
+  // Reject wildcard or empty values
+  if (jail === '*' || jail.trim() === '') {
+    throw new Error('Invalid jail name: wildcard "*" or empty string not allowed');
+  }
+  
+  if (ip === '*' || ip.trim() === '') {
+    throw new Error('Invalid IP address: wildcard "*" or empty string not allowed');
+  }
+  
+  // Validate jail name format
   validateJailName(jail);
+  
+  // Validate IP format (IPv4 or IPv6)
   validateIP(ip);
-  await execFail2banClient(['set', jail, 'unbanip', ip], 10000);
-  return {
-    success: true,
-    message: `IP "${ip}" unbanned from jail "${jail}"`,
-  };
+  
+  // Check if jail exists and is active in fail2ban
+  try {
+    const globalStatus = await getGlobalStatus();
+    if (!globalStatus.jails.includes(jail)) {
+      // Jail doesn't exist or is not active
+      throw new Error(`Jail "${jail}" does not exist or is not active in fail2ban`);
+    }
+  } catch (err) {
+    // If we can't check global status, still try to unban (might be a transient issue)
+    if (err.message && err.message.includes('does not exist')) {
+      throw err;
+    }
+    console.warn(`[F2B] Could not verify jail status for ${jail}, proceeding with unban: ${err.message}`);
+  }
+  
+  // Execute unban command with ignoreNOK behavior
+  // If IP is already unbanned, fail2ban returns NOK but we treat it as success
+  try {
+    const result = await execFail2banClient(['set', jail, 'unbanip', ip], 10000, true); // ignoreNOK = true
+    
+    // If we got NOK, it means IP was already unbanned - still return success
+    if (result.nok) {
+      console.log(`[F2B] IP "${ip}" was already unbanned from jail "${jail}" (NOK response, treating as success)`);
+      return {
+        success: true,
+        jail: jail,
+        ip: ip,
+        message: `IP "${ip}" was already unbanned from jail "${jail}"`,
+      };
+    }
+    
+    // Success - IP was unbanned
+    return {
+      success: true,
+      jail: jail,
+      ip: ip,
+      message: `IP "${ip}" unbanned from jail "${jail}" successfully`,
+    };
+  } catch (err) {
+    // Check if error is because IP is not banned (NOK)
+    const errorMsg = (err.message || '').toLowerCase();
+    if (errorMsg.includes('nok') || errorMsg.includes('not found') || errorMsg.includes('not banned')) {
+      // IP was already unbanned - return success
+      console.log(`[F2B] IP "${ip}" was already unbanned from jail "${jail}" (error indicates not banned, treating as success)`);
+      return {
+        success: true,
+        jail: jail,
+        ip: ip,
+        message: `IP "${ip}" was already unbanned from jail "${jail}"`,
+      };
+    }
+    
+    // Real error - rethrow
+    throw new Error(`Failed to unban IP "${ip}" from jail "${jail}": ${err.message}`);
+  }
 }
 
 /**
