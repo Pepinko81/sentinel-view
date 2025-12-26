@@ -98,7 +98,7 @@ AUTH_TOKEN=dev-token-change-me
 SCRIPTS_DIR=/path/to/scripts
 NODE_ENV=development
 SERVER_HOST=0.0.0.0
-PORT=3002
+PORT=3010
 FAIL2BAN_AVAILABLE=false
 ```
 
@@ -110,7 +110,7 @@ AUTH_TOKEN=your-secure-production-token
 SCRIPTS_DIR=/opt/fail2ban-dashboard/scripts
 NODE_ENV=production
 SERVER_HOST=127.0.0.1
-PORT=3002
+PORT=3010
 FAIL2BAN_AVAILABLE=true
 CORS_ORIGIN=https://your-frontend-domain.com
 ```
@@ -132,19 +132,19 @@ CORS_ORIGIN=https://your-frontend-domain.com
 
 3. Test API:
    ```bash
-   curl -H "Authorization: Bearer <token>" http://localhost:3002/api/jails
+   curl -H "Authorization: Bearer <token>" http://localhost:3010/api/jails
    ```
 
 ### Verify LAN Access
 
 1. Start backend (should bind to 0.0.0.0):
    ```
-   🚀 Sentinel Backend API running on 0.0.0.0:3002
+   🚀 Sentinel Backend API running on 0.0.0.0:3010
    ```
 
 2. Access from another computer:
    ```bash
-   curl -H "Authorization: Bearer <token>" http://<server-ip>:3002/health
+   curl -H "Authorization: Bearer <token>" http://<server-ip>:3010/health
    ```
 
 3. Check CORS headers in browser dev tools:
@@ -211,18 +211,18 @@ After these fixes, the system MUST satisfy:
 
 1. Verify `NODE_ENV=development`
 2. Check CORS config allows all origins in dev
-3. Verify backend is accessible: `curl http://<server-ip>:3002/health`
+3. Verify backend is accessible: `curl http://<server-ip>:3010/health`
 
 ### Backend not accessible from LAN
 
 1. Check binding:
    ```
-   🚀 Sentinel Backend API running on 0.0.0.0:3002
+   🚀 Sentinel Backend API running on 0.0.0.0:3010
    ```
 
 2. Check firewall:
    ```bash
-   sudo ufw allow 3002
+   sudo ufw allow 3010
    ```
 
 3. Verify SERVER_HOST in .env.development

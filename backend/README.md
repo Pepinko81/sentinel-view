@@ -401,10 +401,10 @@ Test endpoints with curl:
 
 ```bash
 # Health check
-curl http://localhost:3002/health
+curl http://localhost:3010/health
 
 # API endpoint (with auth)
-curl -H "Authorization: Bearer your-token" http://localhost:3002/api/jails
+curl -H "Authorization: Bearer your-token" http://localhost:3010/api/jails
 ```
 
 ## Troubleshooting

@@ -137,11 +137,11 @@ NODE_ENV=production
 
 **Description**: Server port
 
-**Default**: `3002`
+**Default**: `3010`
 
 **Example**:
 ```env
-PORT=3002
+PORT=3010
 ```
 
 ### CORS_ORIGIN
@@ -366,7 +366,7 @@ AUTH_TOKEN=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
 SCRIPTS_DIR=/opt/fail2ban-dashboard/scripts
 FAIL2BAN_AVAILABLE=true
 NODE_ENV=production
-PORT=3002
+PORT=3010
 CORS_ORIGIN=https://dashboard.example.com
 CACHE_OVERVIEW_TTL=10000
 PERFORMANCE_MONITORING=false
