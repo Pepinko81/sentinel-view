@@ -1,5 +1,6 @@
 const rateLimit = require('express-rate-limit');
 const config = require('../config/config');
+const env = require('../config/env');
 
 /**
  * Per-IP rate limiter for API endpoints
@@ -7,8 +8,8 @@ const config = require('../config/config');
  * and reduce system load from excessive sudo calls
  */
 const apiLimiter = rateLimit({
-  windowMs: config.rateLimit.windowMs,
-  max: config.rateLimit.max,
+  windowMs: 60 * 1000, // 1 minute
+  max: env.RATE_LIMIT_API, // Configurable via RATE_LIMIT_API env var (default: 100)
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
   keyGenerator: (req) => {
@@ -33,7 +34,38 @@ const apiLimiter = rateLimit({
     res.status(429).json({
       error: 'Too many requests from this IP, please try again later.',
       code: 'RATE_LIMIT_EXCEEDED',
-      retryAfter: Math.ceil(config.rateLimit.windowMs / 1000), // seconds
+      retryAfter: 60, // seconds
+    });
+  },
+});
+
+/**
+ * Stricter rate limiter for login endpoint (fail2ban-style)
+ * Prevents brute force attacks
+ */
+const loginLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: env.RATE_LIMIT_LOGIN, // Configurable via RATE_LIMIT_LOGIN env var (default: 5)
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return req.ip || 
+           req.connection.remoteAddress || 
+           req.socket.remoteAddress ||
+           (req.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
+           'unknown';
+  },
+  message: {
+    error: 'Too many login attempts. Please try again later.',
+    code: 'LOGIN_RATE_LIMIT_EXCEEDED',
+  },
+  skipSuccessfulRequests: true, // Don't count successful logins
+  skipFailedRequests: false, // Count failed login attempts
+  handler: (req, res) => {
+    res.status(429).json({
+      error: 'Too many login attempts from this IP. Please try again in 10 minutes.',
+      code: 'LOGIN_RATE_LIMIT_EXCEEDED',
+      retryAfter: 600, // 10 minutes in seconds
     });
   },
 });
@@ -70,5 +102,6 @@ const backupLimiter = rateLimit({
 module.exports = {
   apiLimiter,
   backupLimiter,
+  loginLimiter,
 };
 

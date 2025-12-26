@@ -9,19 +9,41 @@ const env = require('../config/env');
  * - 24h token expiration
  */
 
-// Generate JWT token
+// Generate JWT access token (short-lived)
 function generateToken(payload) {
   return jwt.sign(
     payload,
-    env.AUTH_SECRET,
-    { expiresIn: '24h' }
+    env.JWT_SECRET,
+    { expiresIn: env.JWT_EXPIRES }
+  );
+}
+
+// Generate JWT refresh token (long-lived, stored in httpOnly cookie)
+function generateRefreshToken(payload) {
+  return jwt.sign(
+    { ...payload, type: 'refresh' },
+    env.JWT_SECRET,
+    { expiresIn: env.JWT_REFRESH_EXPIRES }
   );
 }
 
 // Verify JWT token
 function verifyToken(token) {
   try {
-    return jwt.verify(token, env.AUTH_SECRET);
+    return jwt.verify(token, env.JWT_SECRET);
+  } catch (err) {
+    return null;
+  }
+}
+
+// Verify refresh token (checks type)
+function verifyRefreshToken(token) {
+  try {
+    const decoded = jwt.verify(token, env.JWT_SECRET);
+    if (decoded.type !== 'refresh') {
+      return null; // Not a refresh token
+    }
+    return decoded;
   } catch (err) {
     return null;
   }
@@ -111,8 +133,14 @@ function handleLogin(req, res) {
     });
   }
 
-  // Generate token
+  // Generate access token (short-lived)
   const token = generateToken({
+    authenticated: true,
+    timestamp: Date.now(),
+  });
+
+  // Generate refresh token (long-lived, stored in httpOnly cookie)
+  const refreshToken = generateRefreshToken({
     authenticated: true,
     timestamp: Date.now(),
   });
@@ -132,36 +160,120 @@ function handleLogin(req, res) {
     isSameOrigin = originHost === host || originHost === requestHost;
   }
   
-  // Only set cookie if:
-  // 1. HTTPS (can use sameSite: 'none' with secure: true) - works cross-site
-  // 2. Same origin (can use sameSite: 'lax') - works same-site
-  // In cross-site HTTP scenarios, skip cookie and rely on Authorization header only
+  // Set refresh token in httpOnly cookie (always set if possible)
   if (isHTTPS || isSameOrigin) {
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: isHTTPS || isProduction,
+      sameSite: isHTTPS ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/',
+      domain: undefined,
+    });
+    
+    // Also set access token in cookie for convenience (short-lived)
     res.cookie('authToken', token, {
       httpOnly: true,
       secure: isHTTPS || isProduction,
-      sameSite: isHTTPS ? 'none' : 'lax', // 'none' for cross-site HTTPS, 'lax' for same-site
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      sameSite: isHTTPS ? 'none' : 'lax',
+      maxAge: 60 * 60 * 1000, // 1 hour
       path: '/',
       domain: undefined,
     });
   }
   
-  // ALWAYS return token in response body
+  // ALWAYS return access token in response body
   // Frontend will use this in Authorization header (required for cross-site HTTP scenarios)
   return res.json({
     success: true,
     message: 'Authentication successful',
-    token: token, // Token for Authorization header (required for cross-site HTTP)
+    token: token, // Access token for Authorization header
+    expiresIn: 3600, // 1 hour in seconds
   });
 }
 
 /**
- * Logout handler - clears cookie
+ * Refresh token handler - generates new access token from refresh token
+ */
+function handleRefresh(req, res) {
+  // Get refresh token from cookie
+  let refreshToken = req.cookies?.refreshToken;
+  
+  if (!refreshToken) {
+    return res.status(401).json({
+      error: 'Refresh token required',
+      code: 'REFRESH_TOKEN_REQUIRED',
+    });
+  }
+
+  // Verify refresh token
+  const decoded = verifyRefreshToken(refreshToken);
+  if (!decoded) {
+    // Clear invalid refresh token
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+    });
+    
+    return res.status(401).json({
+      error: 'Invalid or expired refresh token',
+      code: 'REFRESH_TOKEN_INVALID',
+    });
+  }
+
+  // Generate new access token
+  const newToken = generateToken({
+    authenticated: true,
+    timestamp: Date.now(),
+  });
+
+  // Set new access token in cookie if possible
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isHTTPS = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https';
+  const origin = req.headers.origin;
+  const host = req.get('host');
+  
+  let isSameOrigin = false;
+  if (origin && host) {
+    const originHost = new URL(origin).host;
+    const requestHost = host.split(':')[0];
+    isSameOrigin = originHost === host || originHost === requestHost;
+  }
+
+  if (isHTTPS || isSameOrigin) {
+    res.cookie('authToken', newToken, {
+      httpOnly: true,
+      secure: isHTTPS || isProduction,
+      sameSite: isHTTPS ? 'none' : 'lax',
+      maxAge: 60 * 60 * 1000, // 1 hour
+      path: '/',
+      domain: undefined,
+    });
+  }
+
+  return res.json({
+    success: true,
+    token: newToken,
+    expiresIn: 3600,
+  });
+}
+
+/**
+ * Logout handler - clears cookies
  */
 function handleLogout(req, res) {
   const isProduction = process.env.NODE_ENV === 'production';
   res.clearCookie('authToken', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax',
+    path: '/',
+    domain: undefined,
+  });
+  
+  res.clearCookie('refreshToken', {
     httpOnly: true,
     secure: isProduction,
     sameSite: 'lax',
@@ -218,7 +330,10 @@ module.exports = {
   requireAuth,
   handleLogin,
   handleLogout,
+  handleRefresh,
   checkAuth,
   generateToken,
+  generateRefreshToken,
   verifyToken,
+  verifyRefreshToken,
 };

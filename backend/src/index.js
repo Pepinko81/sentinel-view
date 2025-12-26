@@ -8,6 +8,7 @@ const config = require('./config/config');
 const env = require('./config/env');
 const corsOptions = require('./config/cors');
 const { requireAuth } = require('./middleware/auth');
+const { requireAllowlist } = require('./middleware/allowlist');
 const { errorHandler } = require('./middleware/errorHandler');
 const { performanceMonitor } = require('./middleware/performance');
 const { apiLimiter, backupLimiter } = require('./middleware/rateLimiter');
@@ -55,12 +56,10 @@ app.get('/', (req, res) => {
   res.json({ message: 'Sentinel Dashboard API', version: '1.0.0' });
 });
 
-// Auth routes (login, logout, status check) - no auth required
+// Auth routes (login, logout, refresh, status check) - no auth required
 // Mount directly before requireAuth middleware
-const { handleLogin, handleLogout, checkAuth } = require('./middleware/auth');
-app.post('/api/login', handleLogin);
-app.post('/api/logout', handleLogout);
-app.get('/api/auth/status', checkAuth);
+app.use('/api/login', authRoutes);
+app.use('/api/auth', authRoutes);
 
 // API routes (require authentication if enabled)
 if (env.AUTH_ENABLED) {
@@ -92,12 +91,34 @@ const wss = new WebSocketServer({
   path: '/ws/logs',
 });
 
-// Handle WebSocket connections
+// Handle WebSocket connections with authentication
 wss.on('connection', (ws, req) => {
   console.log('[WS] New log stream connection');
   
-  // Simple authentication check (optional)
-  // For now, allow all connections since we're behind system access
+  // Extract token from query string or Authorization header
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const tokenFromQuery = url.searchParams.get('token');
+  const authHeader = req.headers.authorization;
+  const token = tokenFromQuery || (authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null);
+  
+  // Verify authentication
+  if (env.AUTH_ENABLED) {
+    const { verifyToken } = require('./middleware/auth');
+    if (!token) {
+      console.warn('[WS] Connection rejected: No token provided');
+      ws.close(1008, 'Authentication required');
+      return;
+    }
+    
+    const decoded = verifyToken(token);
+    if (!decoded) {
+      console.warn('[WS] Connection rejected: Invalid token');
+      ws.close(1008, 'Invalid or expired token');
+      return;
+    }
+    
+    console.log('[WS] Authenticated connection from user');
+  }
   
   ws.on('message', (message) => {
     try {
@@ -114,7 +135,7 @@ wss.on('connection', (ws, req) => {
     console.error('[WS] WebSocket error:', error);
   });
   
-  // Auto-start log stream on connection
+  // Auto-start log stream on connection (after auth check)
   streamFail2banLog(ws);
 });
 

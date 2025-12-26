@@ -11,6 +11,18 @@ const AUTH_TOKEN = process.env.AUTH_TOKEN || process.env.API_TOKEN || 'change-me
 const AUTH_SECRET = process.env.AUTH_SECRET || AUTH_TOKEN; // JWT secret (can be same as token for simplicity)
 const AUTH_ALLOW_IPS = process.env.AUTH_ALLOW_IPS || ''; // Comma-separated IPs/CIDR: "127.0.0.1,192.168.0.0/24"
 
+// JWT configuration
+const JWT_SECRET = process.env.JWT_SECRET || AUTH_SECRET; // Separate JWT secret (recommended)
+const JWT_EXPIRES = process.env.JWT_EXPIRES || '1h'; // Access token expiration (default: 1 hour)
+const JWT_REFRESH_EXPIRES = process.env.JWT_REFRESH_EXPIRES || '7d'; // Refresh token expiration (default: 7 days)
+
+// IP Allowlist (blocks all other origins if enabled)
+const ALLOWLIST = process.env.ALLOWLIST || ''; // Comma-separated IPs/CIDR: "192.168.0.0/24,10.0.0.1" or "*" to disable
+
+// Rate limiting configuration
+const RATE_LIMIT_LOGIN = parseInt(process.env.RATE_LIMIT_LOGIN) || 5; // Login attempts per window
+const RATE_LIMIT_API = parseInt(process.env.RATE_LIMIT_API) || 100; // API requests per minute
+
 // Parse allowed IPs
 function parseAllowedIPs(ipString) {
   if (!ipString || ipString.trim() === '') {
@@ -73,11 +85,36 @@ function isIPAllowed(clientIP, allowedIPs) {
   return false;
 }
 
+// Parse allowlist (different from AUTH_ALLOW_IPS - this blocks all other origins)
+function parseAllowlist(allowlistString) {
+  if (!allowlistString || allowlistString.trim() === '' || allowlistString === '*') {
+    return null; // null means allowlist is disabled
+  }
+  
+  return parseAllowedIPs(allowlistString);
+}
+
+// Check if IP is in allowlist (returns true if allowlist is disabled)
+function isIPInAllowlist(clientIP, allowlist) {
+  if (allowlist === null) {
+    return true; // Allowlist disabled - allow all
+  }
+  
+  return isIPAllowed(clientIP, allowlist);
+}
+
 module.exports = {
   AUTH_ENABLED,
   AUTH_TOKEN,
   AUTH_SECRET,
   AUTH_ALLOW_IPS: parseAllowedIPs(AUTH_ALLOW_IPS),
+  JWT_SECRET,
+  JWT_EXPIRES,
+  JWT_REFRESH_EXPIRES,
+  ALLOWLIST: parseAllowlist(ALLOWLIST),
+  isIPInAllowlist,
+  RATE_LIMIT_LOGIN,
+  RATE_LIMIT_API,
   isIPAllowed,
   nodeEnv,
 };
