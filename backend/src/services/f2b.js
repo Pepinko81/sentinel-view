@@ -644,65 +644,83 @@ async function readBanHistory(jail = null, limit = 100) {
   
   console.log(`[F2B] Reading ban history from: ${dbPath}${jail ? ` (jail: ${jail})` : ''}`);
   
-  if (!fs.existsSync(dbPath)) {
-    console.warn(`[F2B] Database file not found: ${dbPath}`);
-    return [];
-  }
-  
-  // Check file permissions
-  try {
-    const stats = fs.statSync(dbPath);
-    console.log(`[F2B] Database file exists, size: ${stats.size} bytes, mode: ${stats.mode.toString(8)}`);
-  } catch (statErr) {
-    console.warn(`[F2B] Cannot stat database file: ${statErr.message}`);
-  }
-  
-  try {
-    const db = new Database(dbPath, { readonly: true });
-    
-    // Check if bans table exists
-    const tableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='bans'").get();
-    if (!tableCheck) {
-      console.warn(`[F2B] Database table 'bans' does not exist`);
+  // Try to read from database first
+  let dbRecords = [];
+  if (fs.existsSync(dbPath)) {
+    try {
+      const db = new Database(dbPath, { readonly: true });
+      
+      // Check if bans table exists
+      const tableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='bans'").get();
+      if (tableCheck) {
+        let query = 'SELECT jail, ip, timeofban, bantime FROM bans';
+        const params = [];
+        
+        if (jail) {
+          query += ' WHERE jail = ?';
+          params.push(jail);
+        }
+        
+        query += ' ORDER BY timeofban DESC LIMIT ?';
+        params.push(limit);
+        
+        dbRecords = db.prepare(query).all(...params);
+        console.log(`[F2B] Found ${dbRecords.length} records in database`);
+      }
+      
       db.close();
-      return [];
+    } catch (err) {
+      console.warn(`[F2B] Database read failed: ${err.message}`);
     }
-    
-    let query = 'SELECT jail, ip, timeofban, bantime FROM bans';
-    const params = [];
-    
-    if (jail) {
-      query += ' WHERE jail = ?';
-      params.push(jail);
-    }
-    
-    query += ' ORDER BY timeofban DESC LIMIT ?';
-    params.push(limit);
-    
-    console.log(`[F2B] Executing query: ${query} with params:`, params);
-    const rows = db.prepare(query).all(...params);
-    db.close();
-    
-    console.log(`[F2B] Found ${rows.length} ban history records`);
-    
-    return rows.map(row => ({
-      jail: row.jail,
-      ip: row.ip,
-      timeofban: row.timeofban,
-      bantime: row.bantime,
-      action: 'ban',
-    }));
-  } catch (err) {
-    // Handle permission errors gracefully - database might be readable only by root
-    if (err.message && (err.message.includes('unable to open database file') || err.message.includes('EACCES'))) {
-      console.warn(`[F2B] Cannot access database file (permission denied): ${dbPath}. Database may be readable only by root.`);
-      console.warn(`[F2B] Try: sudo chmod 644 ${dbPath} or add read permission for your user`);
-      return [];
-    }
-    console.error(`[F2B] Error reading ban history: ${err.message}`);
-    console.error(`[F2B] Error stack: ${err.stack}`);
-    return [];
   }
+  
+  // If we have a jail filter and database has fewer records than expected, 
+  // supplement with active bans from CLI (for better accuracy)
+  // This ensures UI shows all active bans even if DB is out of sync
+  if (jail) {
+    try {
+      const jailStatus = await getJailStatus(jail);
+      const activeIPs = jailStatus.bannedIPs || [];
+      
+      // Get IPs already in database
+      const dbIPs = new Set(dbRecords.map(r => r.ip));
+      
+      // Add active bans that are not in database
+      const now = Math.floor(Date.now() / 1000);
+      let addedCount = 0;
+      for (const ip of activeIPs) {
+        const ipStr = typeof ip === 'string' ? ip : ip.ip;
+        if (!dbIPs.has(ipStr)) {
+          // This IP is active but not in DB - add it with approximate timestamp
+          dbRecords.push({
+            jail: jail,
+            ip: ipStr,
+            timeofban: now - 3600, // Approximate: 1 hour ago
+            bantime: jailStatus.banTime || 3600,
+          });
+          addedCount++;
+        }
+      }
+      
+      // Sort by timeofban (newest first) and limit
+      dbRecords.sort((a, b) => b.timeofban - a.timeofban);
+      dbRecords = dbRecords.slice(0, limit);
+      
+      if (addedCount > 0) {
+        console.log(`[F2B] Supplemented database with ${addedCount} active bans from CLI (total: ${dbRecords.length})`);
+      }
+    } catch (err) {
+      console.warn(`[F2B] Failed to supplement with CLI data: ${err.message}`);
+    }
+  }
+  
+  return dbRecords.map(row => ({
+    jail: row.jail,
+    ip: row.ip,
+    timeofban: row.timeofban,
+    bantime: row.bantime,
+    action: 'ban',
+  }));
 }
 
 /**

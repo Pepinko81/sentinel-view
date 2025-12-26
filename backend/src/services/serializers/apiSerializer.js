@@ -88,10 +88,17 @@ function serializeJail(jail) {
                   : (activeBannedIPsCount > 0 ? activeBannedIPsCount : 0))));
 
   // total_banned: historical total (optional, informational)
+  // Check multiple possible field names from different sources
   const totalBanned =
     typeof jail.total_banned === 'number'
       ? jail.total_banned
-      : (typeof jail.totalBanned === 'number' ? jail.totalBanned : undefined);
+      : (typeof jail.totalBanned === 'number'
+          ? jail.totalBanned
+          : (typeof jail.bans_total === 'number'
+              ? jail.bans_total
+              : (typeof jail.failures_total === 'number'
+                  ? jail.failures_total
+                  : undefined)));
 
   const bannedIpsRaw = Array.isArray(jail.banned_ips)
     ? jail.banned_ips
