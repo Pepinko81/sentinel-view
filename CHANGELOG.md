@@ -5,7 +5,14 @@ All notable changes to Sentinel Dashboard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2024-12-26 - Production Release
+## [2.0.0] - 2024-12-26 - Public Release
+
+### Public Release Highlights
+- **Automated Installer**: One-command installation for Ubuntu/Debian
+- **Production Ready**: Systemd services, Docker support, comprehensive documentation
+- **Security Hardening**: JWT rotation, rate limiting, brute force protection
+- **UI Polish**: Clean interface, removed development artifacts
+- **Public Documentation**: Complete README, landing page, marketing materials
 
 ### Added
 - **Automated Installer**: One-command installation script for Ubuntu/Debian

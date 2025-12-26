@@ -294,13 +294,23 @@ print_summary() {
     echo "Backend service: sentinel-backend"
     echo "Frontend service: sentinel-frontend (if configured)"
     echo ""
+    
+    # Get server IP/hostname
+    SERVER_IP=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "localhost")
+    if [ -z "$SERVER_IP" ] || [ "$SERVER_IP" = "127.0.0.1" ]; then
+        SERVER_IP="localhost"
+    fi
+    
+    echo "✅ Sentinel installed successfully"
+    echo ""
+    echo "Access your dashboard:"
+    echo "  Backend API: http://$SERVER_IP:3010"
+    echo "  Frontend UI: http://$SERVER_IP:8080"
+    echo ""
     echo "Useful commands:"
     echo "  sudo systemctl status sentinel-backend"
     echo "  sudo systemctl restart sentinel-backend"
     echo "  sudo journalctl -u sentinel-backend -f"
-    echo ""
-    echo "Backend API: http://localhost:3010"
-    echo "Frontend UI: http://localhost:8080 (if frontend service is running)"
     echo ""
     log_warn "IMPORTANT: Update AUTH_TOKEN in $INSTALL_DIR/backend/.env before production use!"
     echo ""

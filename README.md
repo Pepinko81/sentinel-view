@@ -1,15 +1,15 @@
-# Sentinel Dashboard
+# Sentinel — The Missing Dashboard for Fail2ban
 
 <div align="center">
 
 ![Sentinel Dashboard Logo](logo.png)
 
-**Fail2Ban Web Dashboard – Server Security Monitor**
+**The modern, production-ready web interface for monitoring and managing fail2ban**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/Pepinko81/sentinel-view/releases)
 
-*A modern, production-ready web interface for monitoring and managing fail2ban security configurations*
+*Stop managing fail2ban from the command line. Get real-time visibility into your security infrastructure.*
 
 </div>
 
@@ -17,52 +17,44 @@
 
 ## Why Sentinel?
 
-**Sentinel Dashboard** is a comprehensive, production-ready solution for monitoring and managing your fail2ban security infrastructure. Whether you're running a single server or managing multiple systems, Sentinel provides:
+Fail2ban is powerful, but monitoring it requires SSH access and command-line expertise. **Sentinel** bridges that gap by providing a beautiful, real-time web dashboard that gives you instant visibility into your security infrastructure.
 
-- **🔍 Real-Time Monitoring**: See active bans, jail status, and security events as they happen
-- **🛡️ Centralized Management**: Control all your fail2ban jails from a single, intuitive interface
-- **📊 Security Insights**: Track ban patterns, identify threats, and analyze security trends
-- **⚡ Production Ready**: Automated installation, systemd services, Docker support, and enterprise-grade security
-- **🔐 Secure by Default**: JWT authentication, rate limiting, IP allowlists, and brute force protection
+Whether you're managing a single server or a fleet of systems, Sentinel makes fail2ban monitoring accessible, actionable, and secure.
 
-Perfect for system administrators, DevOps teams, and security professionals who need a reliable, secure way to monitor and manage fail2ban across their infrastructure.
+## Screenshots
 
----
+![Dashboard Overview](./screenshots/overview.png)
+*Real-time overview of all jails, active bans, and security metrics*
 
-> **⚠️ SECURITY NOTICE**: This application requires system-level access to fail2ban and may execute privileged commands. 
-> - Always use strong authentication tokens
-> - Run in a secure network environment
-> - Review and restrict script execution permissions
-> - Keep dependencies updated
-> - Do not expose to public internet without proper security measures
+![Ban Management](./screenshots/bans.png)
+*View active bans, ban history, and manage IP addresses with one click*
 
-## Project Overview
+![Live Logs](./screenshots/logs.png)
+*Stream fail2ban logs in real-time via WebSocket*
 
-Sentinel Dashboard provides a modern, real-time interface for monitoring fail2ban jails, active IP bans, ban history, and server security statistics. Built with React, TypeScript, and a secure Node.js backend.
+## Features
 
-## Technologies
+### Core Functionality
+- **🔴 Live Fail2ban Dashboard** — Real-time monitoring of all jails and active bans
+- **📊 View Active & Historical Bans** — See current bans and complete ban history with filtering
+- **🚫 One-Click Unban** — Quickly unban IP addresses from any jail
+- **⚙️ Enable/Disable Jails** — Start, stop, and restart fail2ban jails from the UI
+- **🔧 Create Filters** — Build and manage fail2ban filters through the web interface
+- **🔄 Restart Fail2ban** — Restart the fail2ban service with a single click
+- **📡 WebSocket Live Logs** — Stream fail2ban logs in real-time
 
-This project is built with:
+### Security & Production Features
+- **🔐 JWT Authentication** — Secure token-based authentication with automatic rotation
+- **🛡️ Rate Limiting** — Fail2ban-style rate limiting (5 login attempts / 10 min)
+- **🚨 Brute Force Protection** — Automatic account lockout after failed attempts
+- **🌐 IP Allowlist** — Optional IP-based access control
+- **⚡ Production Ready** — Systemd services, Docker support, automated installation
 
-- **Frontend**: Vite, TypeScript, React, shadcn-ui, Tailwind CSS
-- **Backend**: Node.js, Express, fail2ban CLI integration
-- **State Management**: React Query (TanStack Query)
-- **UI Components**: Radix UI, shadcn/ui
+## Installation
 
-## Getting Started
+### Option A: Automated Installer (Recommended)
 
-### Prerequisites
-
-- Node.js >= 18.0.0
-- npm or yarn
-- fail2ban installed and running (for backend)
-- Ubuntu/Debian Linux (for installer script)
-
-### Installation
-
-#### Option 1: Automated Installation (Recommended)
-
-The easiest way to install Sentinel Dashboard is using the automated installer:
+The fastest way to get started:
 
 ```bash
 curl -s https://raw.githubusercontent.com/Pepinko81/sentinel-view/main/install.sh | sudo bash
@@ -76,110 +68,23 @@ cd sentinel-view
 sudo ./install.sh
 ```
 
-The installer will:
-- Detect your OS (Ubuntu/Debian)
-- Install Node.js, nginx, and fail2ban (if missing)
-- Clone/install Sentinel Dashboard to `/opt/sentinel`
-- Configure systemd services
-- Set up environment variables
-- Start services automatically
+**What the installer does:**
+- Detects your OS (Ubuntu 20.04–24.04, Debian)
+- Installs Node.js, nginx, and fail2ban (if missing)
+- Installs Sentinel to `/opt/sentinel`
+- Configures systemd services
+- Sets up environment variables
+- Starts services automatically
 
-#### Option 2: Manual Installation
+**After installation:**
+- Backend API: `http://your-server:3010`
+- Frontend UI: `http://your-server:8080`
+- Check status: `sudo systemctl status sentinel-backend`
 
-1. **Clone the repository:**
+### Option B: Docker
 
-```sh
-git clone https://github.com/Pepinko81/sentinel-view.git
-cd sentinel-view
-```
+Deploy using Docker Compose:
 
-2. **Install frontend dependencies:**
-
-```sh
-npm install
-```
-
-3. **Install backend dependencies:**
-
-```sh
-cd backend
-npm install
-```
-
-4. **Configure environment:**
-
-See `backend/README.md` for detailed backend configuration instructions.
-
-### Development
-
-**Frontend:**
-```sh
-npm run dev
-```
-
-**Backend:**
-```sh
-cd backend
-npm run dev
-```
-
-The frontend will be available at `http://localhost:8080` and the backend at `http://localhost:3010`.
-
-### Building for Production
-
-**Frontend:**
-```sh
-npm run build
-```
-
-**Backend:**
-```sh
-cd backend
-npm start
-```
-
-## Deployment
-
-### Systemd Services
-
-When installed via the installer script, Sentinel Dashboard runs as systemd services:
-
-**Service Management:**
-```bash
-# Check status
-sudo systemctl status sentinel-backend
-sudo systemctl status sentinel-frontend
-
-# Start services
-sudo systemctl start sentinel-backend
-sudo systemctl start sentinel-frontend
-
-# Restart services
-sudo systemctl restart sentinel-backend
-sudo systemctl restart sentinel-frontend
-
-# Stop services
-sudo systemctl stop sentinel-backend
-sudo systemctl stop sentinel-frontend
-
-# View logs
-sudo journalctl -u sentinel-backend -f
-sudo journalctl -u sentinel-frontend -f
-
-# Enable auto-start on boot
-sudo systemctl enable sentinel-backend
-sudo systemctl enable sentinel-frontend
-```
-
-**Service Files:**
-- Backend: `/etc/systemd/system/sentinel-backend.service`
-- Frontend: `/etc/systemd/system/sentinel-frontend.service`
-
-### Docker Deployment
-
-Sentinel Dashboard can also be deployed using Docker:
-
-**Quick Start:**
 ```bash
 cd docker
 docker-compose up -d
@@ -189,11 +94,104 @@ docker-compose up -d
 - Backend API: `http://localhost:3010`
 - Frontend UI: `http://localhost:8080`
 
-For detailed Docker deployment instructions, see [docker/README.md](docker/README.md).
+For detailed Docker instructions, see [docker/README.md](docker/README.md).
 
-### Uninstallation
+## Quick Start
 
-To remove Sentinel Dashboard:
+1. **Install Sentinel** (see Installation above)
+
+2. **Access the dashboard:**
+   - Open `http://your-server:8080` in your browser
+   - Login with your password (set in `AUTH_TOKEN` env var)
+
+3. **Start monitoring:**
+   - View all jails and active bans
+   - Monitor ban history
+   - Manage jails and IPs
+
+## Service Management
+
+When installed via the installer, Sentinel runs as systemd services:
+
+```bash
+# Check status
+sudo systemctl status sentinel-backend
+sudo systemctl status sentinel-frontend
+
+# Restart services
+sudo systemctl restart sentinel-backend
+sudo systemctl restart sentinel-frontend
+
+# View logs
+sudo journalctl -u sentinel-backend -f
+```
+
+## Troubleshooting
+
+### Backend won't start
+- Check logs: `sudo journalctl -u sentinel-backend -n 50`
+- Verify fail2ban is running: `sudo systemctl status fail2ban`
+- Check permissions: `sudo chmod 644 /opt/sentinel/backend/.env`
+
+### Frontend shows connection errors
+- Verify backend is running: `curl http://localhost:3010/health`
+- Check CORS settings in `backend/.env`
+- Ensure firewall allows port 3010 and 8080
+
+### Can't access fail2ban data
+- Verify sudoers configuration: `sudo visudo -f /etc/sudoers.d/sentinel-backend`
+- Check fail2ban database permissions: `ls -la /var/lib/fail2ban/fail2ban.sqlite3`
+
+### Installation fails
+- Ensure you're running as root: `sudo ./install.sh`
+- Check OS compatibility (Ubuntu 20.04+ or Debian)
+- Review installer output for specific errors
+
+## Configuration
+
+### Environment Variables
+
+Key configuration options in `backend/.env`:
+
+```env
+# Authentication
+AUTH_ENABLED=true
+AUTH_TOKEN=your-secure-password-here
+
+# JWT Settings
+JWT_SECRET=your-jwt-secret-here
+JWT_EXPIRES=1h
+
+# Rate Limiting
+RATE_LIMIT_LOGIN=5
+RATE_LIMIT_API=100
+
+# IP Allowlist (optional)
+ALLOWLIST=192.168.0.0/24,10.0.0.1
+```
+
+See `backend/.env.example` for all available options.
+
+## Security
+
+Sentinel implements multiple security layers:
+
+- **JWT Authentication** with token rotation (1h access tokens, 7d refresh tokens)
+- **Rate Limiting** on login (5 attempts / 10 minutes) and API (100 requests / minute)
+- **Brute Force Protection** with automatic lockout
+- **IP Allowlist** for additional access control
+- **WebSocket Authentication** for secure log streaming
+
+**Best Practices:**
+- Use strong, unique passwords and tokens
+- Enable IP allowlist in production
+- Use HTTPS in production environments
+- Regularly update dependencies
+- Review script execution permissions
+
+## Uninstallation
+
+To remove Sentinel:
 
 ```bash
 sudo ./uninstall.sh
@@ -201,125 +199,54 @@ sudo ./uninstall.sh
 
 This will:
 - Stop and disable systemd services
-- Remove installation files from `/opt/sentinel`
+- Remove installation files
 - Optionally keep ban history and configuration (prompted)
 
 ## Project Structure
 
 ```
 sentinel-view/
-├── src/                    # Frontend React application
-│   ├── components/         # React components
-│   ├── pages/             # Page components
-│   ├── hooks/             # Custom React hooks
-│   ├── lib/               # Utilities and API service
-│   └── types/             # TypeScript type definitions
-├── backend/               # Node.js backend API
-│   ├── src/              # Backend source code
-│   └── scripts/           # Whitelisted bash scripts
-├── deployment/            # Deployment files
-│   └── systemd/          # Systemd service files
-├── docker/               # Docker deployment files
-│   ├── Dockerfile.backend
-│   ├── Dockerfile.frontend
-│   └── docker-compose.yml
-├── install.sh            # Automated installer script
-├── uninstall.sh          # Uninstallation script
-└── public/                # Static assets
+├── backend/          # Node.js API server
+├── src/             # React frontend
+├── deployment/      # Systemd service files
+├── docker/          # Docker deployment files
+├── install.sh       # Automated installer
+└── uninstall.sh     # Removal script
 ```
-
-## Features
-
-### Core Features
-- 🔒 **Real-time Security Monitoring**: Monitor active bans and jail status in real-time
-- 📊 **Comprehensive Dashboard**: Overview of all jails, bans, and system metrics
-- 🛡️ **Jail Management**: Start, stop, and configure fail2ban jails from the UI
-- 📈 **Ban History**: View historical ban events and patterns with detailed filtering
-- 🚫 **IP Unban**: Quickly unban IP addresses from any jail
-- 📝 **Live Log Streaming**: Real-time fail2ban log streaming via WebSocket
-- 🔧 **Filter Management**: Create and manage fail2ban filters through the UI
-- ⚡ **Fast & Responsive**: Optimized for performance with intelligent caching
-
-### Security Features
-- 🔐 **JWT Authentication**: Secure token-based authentication with rotation
-- 🔄 **Refresh Tokens**: Long-lived refresh tokens with automatic renewal
-- 🛡️ **Rate Limiting**: Fail2ban-style rate limiting (login: 5/10min, API: 100/min)
-- 🚫 **Brute Force Protection**: Automatic account lockout after failed attempts
-- 🌐 **IP Allowlist**: Optional IP-based access control
-- 🔒 **WebSocket Authentication**: Secure log streaming with token verification
-- 🚨 **Security Logging**: Comprehensive security event logging
-
-### Deployment Features
-- 📦 **Automated Installer**: One-command installation for Ubuntu/Debian
-- 🔧 **Systemd Services**: Production-ready systemd service files
-- 🐳 **Docker Support**: Complete Docker deployment with docker-compose
-- 🔄 **Easy Updates**: Simple update process with backup support
-- 🗑️ **Clean Uninstall**: Removal script with optional data backup
-
-## Security
-
-Sentinel Dashboard implements multiple layers of security:
-
-### Authentication & Authorization
-- **JWT Tokens**: Short-lived access tokens (1 hour) with automatic rotation
-- **Refresh Tokens**: Long-lived refresh tokens (7 days) stored in HttpOnly cookies
-- **Password Protection**: Secure password-based authentication
-- **IP Allowlist**: Optional IP-based access control for additional security
-
-### Rate Limiting
-- **Login Endpoint**: 5 attempts per 10 minutes (configurable)
-- **API Endpoints**: 100 requests per minute per IP (configurable)
-- **Brute Force Protection**: Automatic lockout after 5 failed attempts (15-minute lockout)
-
-### Network Security
-- **CORS Protection**: Configurable CORS origins
-- **IP Allowlist**: Block all non-allowlisted IPs (optional)
-- **WebSocket Authentication**: All WebSocket connections require valid tokens
-
-### Best Practices
-- Always use strong, unique passwords and tokens
-- Enable IP allowlist in production environments
-- Use HTTPS in production
-- Regularly update dependencies
-- Review and restrict script execution permissions
-- Monitor security logs regularly
-
-For detailed security configuration, see `backend/.env.example`.
 
 ## Documentation
 
-- **Backend API**: See `backend/README.md` for detailed API documentation
-- **Configuration**: See `backend/docs/ENVIRONMENT-CONFIG.md` for environment setup
-- **Deployment**: See `docs/DEPLOYMENT.md` for deployment guides
-- **Docker**: See `docker/README.md` for Docker deployment instructions
+- **Backend API**: See `backend/README.md`
+- **Configuration**: See `backend/docs/ENVIRONMENT-CONFIG.md`
+- **Deployment**: See `docs/DEPLOYMENT.md`
+- **Docker**: See `docker/README.md`
+
+## Support
+
+**Free Community Support:**
+- Open an issue on [GitHub](https://github.com/Pepinko81/sentinel-view/issues)
+- Check existing issues and discussions
+- Review documentation in `docs/` directory
 
 ## Contributing
 
-We welcome contributions! Please follow these steps:
+Contributions are welcome! Please:
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+2. Create a feature branch
 3. Make your changes
-4. Commit your changes (`git commit -m 'Add some amazing feature'`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
+4. Submit a pull request
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Acknowledgments
-
-- Built with [React](https://reactjs.org/), [TypeScript](https://www.typescriptlang.org/), and [Node.js](https://nodejs.org/)
-- UI components from [shadcn/ui](https://ui.shadcn.com/)
-- Icons from [Lucide](https://lucide.dev/)
-
 ---
 
 <div align="center">
 
-**Sentinel Dashboard v2.0.0** - Production Ready
+**Built by [Pepinko](https://github.com/Pepinko81)**
 
-[Report Bug](https://github.com/Pepinko81/sentinel-view/issues) · [Request Feature](https://github.com/Pepinko81/sentinel-view/issues)
+[Report Bug](https://github.com/Pepinko81/sentinel-view/issues) · [Request Feature](https://github.com/Pepinko81/sentinel-view/issues) · [View Releases](https://github.com/Pepinko81/sentinel-view/releases)
 
 </div>
