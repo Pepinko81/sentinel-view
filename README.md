@@ -1,73 +1,121 @@
-# Welcome to your Lovable project
+# Sentinel Dashboard
 
-## Project info
+Fail2Ban Web Dashboard – Server Security Monitor
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+A comprehensive web-based dashboard for monitoring and managing fail2ban security configurations, active bans, and server security metrics.
 
-## How can I edit this code?
+## Project Overview
 
-There are several ways of editing your application.
+Sentinel Dashboard provides a modern, real-time interface for monitoring fail2ban jails, active IP bans, ban history, and server security statistics. Built with React, TypeScript, and a secure Node.js backend.
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
+## Technologies
 
 This project is built with:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- **Frontend**: Vite, TypeScript, React, shadcn-ui, Tailwind CSS
+- **Backend**: Node.js, Express, fail2ban CLI integration
+- **State Management**: React Query (TanStack Query)
+- **UI Components**: Radix UI, shadcn/ui
 
-## How can I deploy this project?
+## Getting Started
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+### Prerequisites
 
-## Can I connect a custom domain to my Lovable project?
+- Node.js >= 18.0.0
+- npm or yarn
+- fail2ban installed and running (for backend)
 
-Yes, you can!
+### Installation
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+1. **Clone the repository:**
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```sh
+git clone <YOUR_GIT_URL>
+cd sentinel-view
+```
+
+2. **Install frontend dependencies:**
+
+```sh
+npm install
+```
+
+3. **Install backend dependencies:**
+
+```sh
+cd backend
+npm install
+```
+
+4. **Configure environment:**
+
+See `backend/README.md` for detailed backend configuration instructions.
+
+### Development
+
+**Frontend:**
+```sh
+npm run dev
+```
+
+**Backend:**
+```sh
+cd backend
+npm run dev
+```
+
+The frontend will be available at `http://localhost:8080` and the backend at `http://localhost:3010`.
+
+### Building for Production
+
+**Frontend:**
+```sh
+npm run build
+```
+
+**Backend:**
+```sh
+cd backend
+npm start
+```
+
+## Project Structure
+
+```
+sentinel-view/
+├── src/                    # Frontend React application
+│   ├── components/         # React components
+│   ├── pages/             # Page components
+│   ├── hooks/             # Custom React hooks
+│   ├── lib/               # Utilities and API service
+│   └── types/             # TypeScript type definitions
+├── backend/               # Node.js backend API
+│   ├── src/              # Backend source code
+│   └── scripts/           # Whitelisted bash scripts
+└── public/                # Static assets
+```
+
+## Features
+
+- 🔒 **Real-time Security Monitoring**: Monitor active bans and jail status
+- 📊 **Comprehensive Dashboard**: Overview of all jails, bans, and system metrics
+- 🛡️ **Jail Management**: Start, stop, and configure fail2ban jails
+- 📈 **Ban History**: View historical ban events and patterns
+- ⚡ **Fast & Responsive**: Optimized for performance with caching
+- 🔐 **Secure API**: Token-based authentication and whitelisted script execution
+
+## Documentation
+
+- **Backend API**: See `backend/README.md` for detailed API documentation
+- **Configuration**: See `backend/docs/ENVIRONMENT-CONFIG.md` for environment setup
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## License
+
+MIT
