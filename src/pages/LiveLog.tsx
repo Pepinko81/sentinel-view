@@ -15,11 +15,11 @@ export default function LiveLog() {
   const connect = () => {
     try {
       // Get backend URL from environment or use default
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3010';
       const wsProtocol = backendUrl.startsWith('https') ? 'wss:' : 'ws:';
       // Extract host:port from URL
       const urlMatch = backendUrl.match(/^https?:\/\/([^\/]+)/);
-      const wsHost = urlMatch ? urlMatch[1] : 'localhost:3001';
+      const wsHost = urlMatch ? urlMatch[1] : 'localhost:3010';
       const wsUrl = `${wsProtocol}//${wsHost}/ws/logs`;
       
       console.log('[LiveLog] Connecting to:', wsUrl);

@@ -43,7 +43,7 @@ Complete step-by-step guide for running the Sentinel Security Monitoring Dashboa
 - Linux server with fail2ban installed
 - Scripts directory: `/opt/fail2ban-dashboard/scripts`
 - Backend user with limited sudo permissions
-- Ports available: `3001` (backend), `5173` (frontend)
+- Ports available: `3010` (backend), `5173` (frontend)
 
 ---
 
@@ -86,7 +86,7 @@ AUTH_TOKEN=your-secure-random-token-here
 SCRIPTS_DIR=/opt/fail2ban-dashboard/scripts
 
 # Server Configuration
-PORT=3001
+PORT=3010
 NODE_ENV=development
 
 # CORS Configuration
@@ -140,7 +140,7 @@ npm run dev
 Expected output:
 ```
 ✅ Configuration validated successfully
-🚀 Sentinel Backend API running on port 3001
+🚀 Sentinel Backend API running on port 3010
 📊 Environment: development
 🔒 Authentication: Enabled
 📁 Scripts directory: /opt/fail2ban-dashboard/scripts
@@ -162,7 +162,7 @@ Expected output:
 Open a new terminal and test the health endpoint:
 
 ```bash
-curl http://localhost:3001/health
+curl http://localhost:3010/health
 ```
 
 **Expected response:**
@@ -257,7 +257,7 @@ You should see:
 ### Test 1: Health Endpoint
 
 ```bash
-curl http://localhost:3001/health
+curl http://localhost:3010/health
 ```
 
 **Success criteria:**
@@ -270,7 +270,7 @@ curl http://localhost:3001/health
 ```bash
 # Replace YOUR_TOKEN with actual token from .env
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-     http://localhost:3001/api/overview
+     http://localhost:3010/api/overview
 ```
 
 **Expected response structure:**
@@ -335,7 +335,7 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
 ### Test 4: Test Without Authentication (Should Fail)
 
 ```bash
-curl http://localhost:3001/api/overview
+curl http://localhost:3010/api/overview
 ```
 
 **Expected response:**
@@ -381,7 +381,7 @@ Open Developer Tools (F12) → Console tab
 **If errors appear:**
 - Check CORS errors → Verify `CORS_ORIGIN` in backend `.env`
 - Check 401 errors → Verify `VITE_API_TOKEN` matches backend `AUTH_TOKEN`
-- Check network errors → Verify backend is running on port 3001
+- Check network errors → Verify backend is running on port 3010
 
 ### Step 4: Verify Dashboard
 
@@ -433,8 +433,8 @@ Open Developer Tools (F12) → Console tab
    - Regenerate token if needed: `openssl rand -hex 32`
 
 3. **API URL incorrect**
-   - Verify `VITE_API_URL=http://localhost:3001` in frontend `.env.local`
-   - Check backend is actually running on port 3001
+   - Verify `VITE_API_URL=http://localhost:3010` in frontend `.env.local`
+   - Check backend is actually running on port 3010
 
 **Solution:**
 ```bash
@@ -525,7 +525,7 @@ sudo journalctl -u fail2ban -n 50
 
 ### Problem: CORS errors in browser
 
-**Error:** `Access to fetch at 'http://localhost:3001/api/...' from origin 'http://localhost:5173' has been blocked by CORS policy`
+**Error:** `Access to fetch at 'http://localhost:3010/api/...' from origin 'http://localhost:5173' has been blocked by CORS policy`
 
 **Solution:**
 1. Verify `CORS_ORIGIN=http://localhost:5173` in backend `.env`
@@ -538,7 +538,7 @@ sudo journalctl -u fail2ban -n 50
 **Error:** `Network error. Please check if the backend is running and accessible.`
 
 **Solution:**
-1. Verify backend is running: `curl http://localhost:3001/health`
+1. Verify backend is running: `curl http://localhost:3010/health`
 2. Check port is not in use: `lsof -i :3001`
 3. Verify firewall allows localhost connections
 4. Check `VITE_API_URL` in frontend `.env.local`
@@ -626,10 +626,10 @@ sudo journalctl -u fail2ban -n 50
 cd backend && npm run dev
 
 # Check health
-curl http://localhost:3001/health
+curl http://localhost:3010/health
 
 # Test API with auth
-curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:3001/api/overview
+curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:3010/api/overview
 
 # Check fail2ban status
 sudo fail2ban-client status
@@ -666,7 +666,7 @@ ls -la /opt/fail2ban-dashboard/scripts/
 sudo /opt/fail2ban-dashboard/scripts/monitor-security.sh
 
 # Check ports in use
-lsof -i :3001  # Backend
+lsof -i :3010  # Backend
 lsof -i :5173  # Frontend
 ```
 

@@ -251,7 +251,7 @@ Create `.env.production` in the backend directory:
 
 ```bash
 NODE_ENV=production
-PORT=3002
+PORT=3010
 AUTH_TOKEN=your-secure-random-token-here
 SERVER_HOST=127.0.0.1  # or 0.0.0.0 for LAN access
 CORS_ORIGIN=http://localhost:5173
