@@ -219,7 +219,7 @@ nano .env.local
 
 ```env
 # Backend API URL
-VITE_API_URL=http://localhost:3001
+VITE_API_URL=http://localhost:3010
 
 # Backend API Token (MUST match backend AUTH_TOKEN)
 VITE_API_TOKEN=your-secure-random-token-here
@@ -320,7 +320,7 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
 
 ```bash
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-     http://localhost:3001/api/jails
+     http://localhost:3010/api/jails
 ```
 
 **Expected response:**
