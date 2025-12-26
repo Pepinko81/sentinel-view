@@ -27,7 +27,7 @@ if (nodeEnv === 'development') {
 
 const config = {
   // Server configuration
-  port: process.env.PORT || 3002,
+  port: process.env.PORT || 3010,
   nodeEnv: nodeEnv,
   
   // Authentication
@@ -214,8 +214,8 @@ function validateConfig() {
       process.exit(1);
     }
     
-    if (config.port === 3002) {
-      warnings.push('Using default port 3002 in production');
+    if (config.port === 3010) {
+      warnings.push('Using default port 3010 in production');
     }
     
     if (!config.scriptsDir) {

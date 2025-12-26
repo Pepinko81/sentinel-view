@@ -4,7 +4,7 @@
  * Handles authentication, error handling, and timeout
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3010';
 const API_TOKEN = import.meta.env.VITE_API_TOKEN || '';
 
 // Validate configuration

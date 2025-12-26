@@ -20,7 +20,10 @@ This is a full-control GUI wrapper for fail2ban that runs on the same machine wh
 - Node.js >= 18.0.0
 - fail2ban installed and configured
 - sudo access with NOPASSWD configured (see below)
-- better-sqlite3 system dependencies (for SQLite database access)
+- Build tools for native module compilation:
+  - `build-essential` (Ubuntu/Debian) or `Development Tools` (CentOS/RHEL)
+  - `python3-dev` (Python development headers)
+  - `make`, `g++` (C++ compiler)
 
 ## Sudoers Configuration
 
@@ -206,7 +209,26 @@ However, this requires updating the backend to use exact command paths, which is
 
 ## Installation
 
-### 1. Install Dependencies
+### 1. Install System Dependencies
+
+**Important**: `better-sqlite3` requires native compilation. Install build tools first:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install -y build-essential python3-dev
+
+# CentOS/RHEL
+sudo yum groupinstall -y "Development Tools"
+sudo yum install -y python3-devel
+
+# Verify installation
+make --version
+g++ --version
+python3 --version
+```
+
+### 2. Install Node.js Dependencies
 
 ```bash
 # Backend
@@ -218,13 +240,18 @@ cd ../src
 npm install
 ```
 
+**Note**: If `better-sqlite3` installation fails:
+- Ensure `build-essential` and `python3-dev` are installed
+- Try: `npm install --build-from-source better-sqlite3`
+- Check Node.js version: `node --version` (should be >= 18.0.0)
+
 ### 2. Configure Environment Variables
 
 Create `.env.production` in the backend directory:
 
 ```bash
 NODE_ENV=production
-PORT=3002
+PORT=3010
 AUTH_TOKEN=your-secure-random-token-here
 SERVER_HOST=127.0.0.1  # or 0.0.0.0 for LAN access
 CORS_ORIGIN=http://localhost:5173
@@ -326,6 +353,40 @@ pm2 start src/index.js --name fail2ban-dashboard --env production
 - Check that `/etc/fail2ban/filter.d/` is writable via sudo
 - Verify regex syntax is correct (use `fail2ban-regex` to test)
 - Check backend logs for detailed error messages
+
+### npm install fails with "not found: make" or build errors
+
+**Problem**: Missing build tools required for native module compilation (`better-sqlite3`)
+
+**Solutions**:
+1. Install build dependencies:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get update
+   sudo apt-get install -y build-essential python3-dev
+   
+   # CentOS/RHEL
+   sudo yum groupinstall -y "Development Tools"
+   sudo yum install -y python3-devel
+   ```
+
+2. Verify tools are installed:
+   ```bash
+   make --version
+   g++ --version
+   python3 --version
+   ```
+
+3. Try rebuilding better-sqlite3:
+   ```bash
+   cd backend
+   npm install --build-from-source better-sqlite3
+   ```
+
+4. If still failing, check Node.js version compatibility:
+   ```bash
+   node --version  # Should be >= 18.0.0
+   ```
 
 ## Production Deployment
 
