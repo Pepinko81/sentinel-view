@@ -12,9 +12,12 @@ const { serializeJail } = require('../services/serializers/apiSerializer');
  */
 router.get('/', async (req, res, next) => {
   try {
+    console.log('[JAILS API] GET /api/jails - Starting request');
+    
     // Discover all configured jails from config files
     const discoveryResult = await discoverConfiguredJails();
     const allConfiguredJails = discoveryResult.jails || [];
+    console.log(`[JAILS API] Discovered ${allConfiguredJails.length} configured jails:`, allConfiguredJails);
     
     // Get active jails from runtime status
     // Determine serverStatus based on whether we can get global status
@@ -22,8 +25,10 @@ router.get('/', async (req, res, next) => {
     let globalStatus = null;
     try {
       globalStatus = await f2b.getGlobalStatus();
+      console.log(`[JAILS API] Fail2ban global status: ${globalStatus.jails.length} active jails`);
     } catch (err) {
       // If we can't get global status, fail2ban might be down
+      console.warn(`[JAILS API] Failed to get global status: ${err.message}`);
       serverStatus = 'offline';
       globalStatus = { jails: [] };
     }
@@ -111,6 +116,8 @@ router.get('/', async (req, res, next) => {
       }
     }));
     
+    console.log(`[JAILS API] Returning ${jails.length} jails, serverStatus: ${serverStatus}`);
+    
     res.json({
       success: true,
       jails,
@@ -160,9 +167,12 @@ router.get('/:name', async (req, res, next) => {
 router.post('/:name/start', async (req, res, next) => {
   try {
     const jailName = req.params.name;
+    console.log(`[JAILS API] POST /api/jails/${jailName}/start - Starting jail`);
     const result = await f2b.startJail(jailName);
+    console.log(`[JAILS API] Jail "${jailName}" start result:`, result.message);
     res.json(result);
   } catch (err) {
+    console.error(`[JAILS API] Error starting jail "${req.params.name}": ${err.message}`);
     next(err);
   }
 });

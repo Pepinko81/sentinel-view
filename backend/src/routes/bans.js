@@ -27,13 +27,16 @@ router.get('/history', async (req, res, next) => {
   try {
     const jail = req.query.jail || null;
     const limit = parseInt(req.query.limit) || 100;
+    console.log(`[BANS API] GET /api/bans/history - jail: ${jail || 'all'}, limit: ${limit}`);
     const history = await f2b.readBanHistory(jail, limit);
+    console.log(`[BANS API] Returning ${history.length} ban history records`);
     res.json({
       success: true,
       history,
       count: history.length,
     });
   } catch (err) {
+    console.error(`[BANS API] Error reading ban history: ${err.message}`);
     next(err);
   }
 });

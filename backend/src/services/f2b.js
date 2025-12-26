@@ -303,31 +303,43 @@ async function validateJailBeforeStart(jail) {
     
     if (!logPath) {
       // No logpath specified - this might be OK for some jails
+      console.log(`[F2B] Jail "${jail}": No logpath specified, skipping validation`);
       return { valid: true };
     }
+    
+    console.log(`[F2B] Validating jail "${jail}": checking logpath ${logPath}`);
     
     // Check if log file exists (with sudo if needed)
     try {
       await execFileAsync(SUDO_PATH, ['test', '-f', logPath], { timeout: 5000 });
+      console.log(`[F2B] Jail "${jail}": Log file exists: ${logPath}`);
       return { valid: true };
     } catch (err) {
       // File doesn't exist - check if it's a directory or wildcard pattern
       try {
         await execFileAsync(SUDO_PATH, ['test', '-d', logPath], { timeout: 5000 });
         // It's a directory, which is valid for some log configurations
+        console.log(`[F2B] Jail "${jail}": Log path is a directory: ${logPath}`);
         return { valid: true };
       } catch (dirErr) {
         // Check if it's a wildcard pattern
         if (logPath.includes('*') || logPath.includes('?')) {
           // Wildcard pattern - let fail2ban handle it
+          console.log(`[F2B] Jail "${jail}": Log path contains wildcard: ${logPath}`);
           return { valid: true };
         }
         
-        // Log file doesn't exist
-        return {
-          valid: false,
-          error: `Log file not found: ${logPath}. Please ensure the log file exists or update the logpath in the jail configuration.`,
-        };
+        // Check if it's a glob pattern (multiple files)
+        if (logPath.includes('{') || logPath.includes(',')) {
+          console.log(`[F2B] Jail "${jail}": Log path contains glob pattern: ${logPath}`);
+          return { valid: true };
+        }
+        
+        // Log file doesn't exist - warn but don't block (fail2ban will handle it)
+        console.warn(`[F2B] Jail "${jail}": Log file not found: ${logPath}. Fail2ban will handle this.`);
+        // Don't block - let fail2ban handle missing log files
+        // Some jails might create log files dynamically
+        return { valid: true };
       }
     }
   } catch (err) {
@@ -527,13 +539,31 @@ async function restartFail2ban() {
 async function readBanHistory(jail = null, limit = 100) {
   const dbPath = config.fail2ban.db;
   
+  console.log(`[F2B] Reading ban history from: ${dbPath}${jail ? ` (jail: ${jail})` : ''}`);
+  
   if (!fs.existsSync(dbPath)) {
     console.warn(`[F2B] Database file not found: ${dbPath}`);
     return [];
   }
   
+  // Check file permissions
+  try {
+    const stats = fs.statSync(dbPath);
+    console.log(`[F2B] Database file exists, size: ${stats.size} bytes, mode: ${stats.mode.toString(8)}`);
+  } catch (statErr) {
+    console.warn(`[F2B] Cannot stat database file: ${statErr.message}`);
+  }
+  
   try {
     const db = new Database(dbPath, { readonly: true });
+    
+    // Check if bans table exists
+    const tableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='bans'").get();
+    if (!tableCheck) {
+      console.warn(`[F2B] Database table 'bans' does not exist`);
+      db.close();
+      return [];
+    }
     
     let query = 'SELECT jail, ip, timeofban, bantime FROM bans';
     const params = [];
@@ -546,8 +576,11 @@ async function readBanHistory(jail = null, limit = 100) {
     query += ' ORDER BY timeofban DESC LIMIT ?';
     params.push(limit);
     
+    console.log(`[F2B] Executing query: ${query} with params:`, params);
     const rows = db.prepare(query).all(...params);
     db.close();
+    
+    console.log(`[F2B] Found ${rows.length} ban history records`);
     
     return rows.map(row => ({
       jail: row.jail,
@@ -560,9 +593,11 @@ async function readBanHistory(jail = null, limit = 100) {
     // Handle permission errors gracefully - database might be readable only by root
     if (err.message && (err.message.includes('unable to open database file') || err.message.includes('EACCES'))) {
       console.warn(`[F2B] Cannot access database file (permission denied): ${dbPath}. Database may be readable only by root.`);
+      console.warn(`[F2B] Try: sudo chmod 644 ${dbPath} or add read permission for your user`);
       return [];
     }
     console.error(`[F2B] Error reading ban history: ${err.message}`);
+    console.error(`[F2B] Error stack: ${err.stack}`);
     return [];
   }
 }
