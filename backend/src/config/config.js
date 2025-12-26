@@ -83,7 +83,7 @@ const config = {
   
   // CORS
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173', // Vite default
-  serverHost: process.env.SERVER_HOST || (nodeEnv === 'production' ? '127.0.0.1' : '0.0.0.0'),
+  serverHost: process.env.SERVER_HOST || '0.0.0.0', // Listen on all interfaces for LAN access
   
   // Rate limiting
   rateLimit: {

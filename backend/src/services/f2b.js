@@ -585,6 +585,11 @@ async function createFilter(name, failregex, ignoreregex = null) {
     throw new Error('Fail regex is required');
   }
   
+  // Validate that failregex contains <HOST> group (required by fail2ban)
+  if (!failregex.includes('<HOST>')) {
+    throw new Error('Fail regex must contain <HOST> group to extract IP addresses. Example: ^<HOST> -.*"GET.*HTTP.*$');
+  }
+  
   const filterDir = config.fail2ban.filterDir;
   const filterPath = path.join(filterDir, `${name}.conf`);
   
