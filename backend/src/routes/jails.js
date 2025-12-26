@@ -4,6 +4,7 @@ const f2b = require('../services/f2b');
 const { discoverConfiguredJails, getJailRuntimeState } = require('../services/jailDiscovery');
 const { inferCategory } = require('../utils/jailClassifier');
 const { getFilterName, filterFileExists } = require('../services/filterManager');
+const { serializeJail } = require('../services/serializers/apiSerializer');
 
 /**
  * GET /api/jails
@@ -16,7 +17,16 @@ router.get('/', async (req, res, next) => {
     const allConfiguredJails = discoveryResult.jails || [];
     
     // Get active jails from runtime status
-    const globalStatus = await f2b.getGlobalStatus();
+    // Determine serverStatus based on whether we can get global status
+    let serverStatus = 'online';
+    let globalStatus = null;
+    try {
+      globalStatus = await f2b.getGlobalStatus();
+    } catch (err) {
+      // If we can't get global status, fail2ban might be down
+      serverStatus = 'offline';
+      globalStatus = { jails: [] };
+    }
     const activeJailNames = new Set(globalStatus.jails || []);
     
     // Get detailed status for each configured jail
@@ -46,7 +56,7 @@ router.get('/', async (req, res, next) => {
       if (isEnabled) {
         try {
           const jailStatus = await f2b.getJailStatus(jailName);
-          return {
+          const rawJail = {
             name: jailName,
             enabled: true,
             category: category,
@@ -60,9 +70,10 @@ router.get('/', async (req, res, next) => {
             maxRetry: jailStatus.maxRetry || null,
             banTime: jailStatus.banTime || null,
           };
+          return serializeJail(rawJail);
         } catch (err) {
           // If jail status fails, but filter exists, still mark as enabled
-          return {
+          const rawJail = {
             name: jailName,
             enabled: true,
             category: category,
@@ -74,6 +85,7 @@ router.get('/', async (req, res, next) => {
             bannedIPs: [],
             filter: filterName || null,
           };
+          return serializeJail(rawJail);
         }
       } else {
         // Jail is disabled (either not in active list or filter missing)
@@ -82,7 +94,7 @@ router.get('/', async (req, res, next) => {
           ? 'missing_filter' 
           : (!isInActiveList ? 'disabled' : 'unknown');
         
-        return {
+        const rawJail = {
           name: jailName,
           enabled: false,
           category: category,
@@ -95,12 +107,15 @@ router.get('/', async (req, res, next) => {
           filter: filterName || null,
           _reason: reason, // Internal field to indicate why disabled
         };
+        return serializeJail(rawJail);
       }
     }));
     
     res.json({
       success: true,
       jails,
+      lastUpdated: new Date().toISOString(),
+      serverStatus: serverStatus,
     });
   } catch (err) {
     next(err);
