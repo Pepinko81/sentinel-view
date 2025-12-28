@@ -12,8 +12,44 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const navigate = useNavigate();
   const { isAuthenticated, authEnabled, loading: authLoading, checkAuthStatus, login } = useAuth();
+
+  // Calculate horizontal offset based on password length (moves right as text grows, capped at 20px)
+  const getHorizontalOffset = () => {
+    if (!isPasswordFocused && !password) return 0;
+    const offset = password.length * 2;
+    return Math.min(20, offset); // Only move right (positive), capped at 20px
+  };
+
+  // Get transform style for the mask
+  const getMaskTransform = () => {
+    const horizontalOffset = getHorizontalOffset();
+    
+    if (isPasswordFocused || password) {
+      // Active state: tilt forward 12deg and move horizontally based on text length
+      return `perspective(500px) rotateX(12deg) translateY(4px) translateX(${horizontalOffset}px)`;
+    } else {
+      // Idle state: no transform (breathing animation handled by CSS class)
+      return "perspective(500px) rotateX(0deg) translateY(0px) translateX(0px)";
+    }
+  };
+
+  // Handle password input changes
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(e.target.value);
+  };
+
+  // Handle focus
+  const handleFocus = () => {
+    setIsPasswordFocused(true);
+  };
+
+  // Handle blur
+  const handleBlur = () => {
+    setIsPasswordFocused(false);
+  };
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -56,12 +92,22 @@ export default function Login() {
             <img
               src={Logo}
               alt="Sentinel Dashboard"
-              className="light-logo h-32 w-32 object-contain"
+              className={`light-logo h-32 w-32 object-contain transition-transform duration-[200ms] ease-in-out ${
+                !isPasswordFocused && !password ? "mask-idle" : ""
+              }`}
+              style={{
+                transform: getMaskTransform()
+              }}
             />
             <img
               src={LogoDark}
               alt="Sentinel Dashboard"
-              className="dark-logo h-32 w-32 object-contain"
+              className={`dark-logo h-32 w-32 object-contain transition-transform duration-[200ms] ease-in-out ${
+                !isPasswordFocused && !password ? "mask-idle" : ""
+              }`}
+              style={{
+                transform: getMaskTransform()
+              }}
             />
           </div>
           <div>
@@ -79,7 +125,9 @@ export default function Login() {
                 id="password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={handlePasswordChange}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
                 placeholder="Enter your password"
                 required
                 autoFocus

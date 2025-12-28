@@ -33,18 +33,17 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "terminal-card relative overflow-hidden p-6 animate-fade-in",
+        "keynote-stat fade-in-keynote relative overflow-hidden",
         variantStyles[variant]
       )}
     >
-      <div className="scanlines" />
       <div className="relative z-10">
         <div className="flex items-start justify-between">
           <div>
-            <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+            <p className="keynote-description font-mono text-xs uppercase tracking-wider text-muted-foreground mb-4">
               {title}
             </p>
-            <p className="mt-2 font-mono text-3xl font-bold text-foreground terminal-glow">
+            <p className="keynote-number font-mono">
               {value}
             </p>
             {description && (

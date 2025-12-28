@@ -1,0 +1,16 @@
+[Unit]
+Description=Sentinel Agent Server - Action Listener
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /opt/sentinel-agent/agent-server.js
+Restart=always
+RestartSec=10
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

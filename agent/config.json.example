@@ -1,0 +1,7 @@
+{
+  "serverId": "server-uuid-here",
+  "secret": "your-secret-key-here",
+  "hqUrl": "http://hq-server-ip:3010",
+  "listenPort": 4040
+}
+

@@ -1,18 +1,44 @@
 const express = require('express');
 const router = express.Router();
 const f2b = require('../services/f2b');
+const servers = require('../services/servers');
 
 /**
  * GET /api/bans
  * Get all active bans
+ * Query: ?server=id (optional - filter by server)
  */
 router.get('/', async (req, res, next) => {
   try {
+    const serverId = req.query.server;
+    
+    // If server specified, get bans from that server
+    if (serverId && serverId !== 'local') {
+      const serverBans = servers.getServerBans(serverId);
+      
+      // Convert to expected format
+      const formattedBans = serverBans.map(ban => ({
+        jail: ban.jail || 'unknown',
+        ip: ban.ip,
+        timeofban: Date.now() / 1000 - 3600, // Approximate
+        bantime: 3600, // Default
+      }));
+      
+      return res.json({
+        success: true,
+        bans: formattedBans,
+        count: formattedBans.length,
+        server: serverId,
+      });
+    }
+    
+    // Default: local server
     const activeBans = await f2b.getActiveBans();
     res.json({
       success: true,
       bans: activeBans,
       count: activeBans.length,
+      server: 'local',
     });
   } catch (err) {
     next(err);

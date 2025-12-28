@@ -1,0 +1,190 @@
+#!/bin/bash
+#
+# Sentinel Agent - Fail2Ban Data Collector
+# Collects fail2ban status and pushes to HQ server
+#
+
+set -euo pipefail
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/config.json"
+
+# Check if config exists
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "ERROR: config.json not found at $CONFIG_FILE" >&2
+  exit 1
+fi
+
+# Read config
+SERVER_ID=$(jq -r '.serverId' "$CONFIG_FILE" 2>/dev/null || echo "")
+SECRET=$(jq -r '.secret' "$CONFIG_FILE" 2>/dev/null || echo "")
+HQ_URL=$(jq -r '.hqUrl' "$CONFIG_FILE" 2>/dev/null || echo "")
+
+# Validate config
+if [ -z "$SERVER_ID" ] || [ "$SERVER_ID" == "null" ]; then
+  echo "ERROR: serverId not found in config.json" >&2
+  exit 1
+fi
+
+if [ -z "$SECRET" ] || [ "$SECRET" == "null" ]; then
+  echo "ERROR: secret not found in config.json" >&2
+  exit 1
+fi
+
+if [ -z "$HQ_URL" ] || [ "$HQ_URL" == "null" ]; then
+  echo "ERROR: hqUrl not found in config.json" >&2
+  exit 1
+fi
+
+# Check if fail2ban-client is available
+if ! command -v fail2ban-client &> /dev/null; then
+  echo "ERROR: fail2ban-client not found" >&2
+  exit 1
+fi
+
+# Collect fail2ban status
+echo "Collecting fail2ban status..." >&2
+
+# Get global status
+GLOBAL_STATUS=$(fail2ban-client status 2>/dev/null || echo "")
+
+# Extract jail names
+JAIL_NAMES=$(echo "$GLOBAL_STATUS" | grep -E "^\s+Jail list:" | sed 's/.*Jail list:\s*//' | tr ',' ' ' | xargs)
+
+# Initialize arrays
+JAILS_JSON="[]"
+BANS_JSON="[]"
+
+# If jails exist, collect details
+if [ -n "$JAIL_NAMES" ]; then
+  JAILS_ARRAY="["
+  BANS_ARRAY="["
+  FIRST_JAIL=true
+  
+  for JAIL in $JAIL_NAMES; do
+    JAIL=$(echo "$JAIL" | xargs) # trim whitespace
+    
+    if [ -z "$JAIL" ]; then
+      continue
+    fi
+    
+    # Get jail status
+    JAIL_STATUS=$(fail2ban-client status "$JAIL" 2>/dev/null || echo "")
+    
+    # Extract banned IPs
+    BANNED_IPS=$(echo "$JAIL_STATUS" | grep -E "^\s+Banned IP list:" | sed 's/.*Banned IP list:\s*//' | tr ',' ' ' | xargs)
+    
+    # Count banned IPs
+    BAN_COUNT=0
+    if [ -n "$BANNED_IPS" ] && [ "$BANNED_IPS" != " " ]; then
+      BAN_COUNT=$(echo "$BANNED_IPS" | wc -w)
+    fi
+    
+    # Check if jail is enabled
+    ENABLED="false"
+    if echo "$GLOBAL_STATUS" | grep -q "$JAIL"; then
+      ENABLED="true"
+    fi
+    
+    # Add to arrays
+    if [ "$FIRST_JAIL" = true ]; then
+      FIRST_JAIL=false
+    else
+      JAILS_ARRAY+=","
+      BANS_ARRAY+=","
+    fi
+    
+    JAILS_ARRAY+="{\"name\":\"$JAIL\",\"enabled\":$ENABLED,\"bans\":$BAN_COUNT}"
+    
+    # Add banned IPs
+    if [ -n "$BANNED_IPS" ] && [ "$BANNED_IPS" != " " ]; then
+      for IP in $BANNED_IPS; do
+        IP=$(echo "$IP" | xargs)
+        if [ -n "$IP" ]; then
+          if [ "$BANS_ARRAY" != "[" ]; then
+            BANS_ARRAY+=","
+          fi
+          BANS_ARRAY+="{\"jail\":\"$JAIL\",\"ip\":\"$IP\"}"
+        fi
+      done
+    fi
+  done
+  
+  JAILS_ARRAY+="]"
+  BANS_ARRAY+="]"
+  JAILS_JSON="$JAILS_ARRAY"
+  BANS_JSON="$BANS_ARRAY"
+fi
+
+# Get last 20 lines of fail2ban log
+LOG_LINES="[]"
+if [ -f "/var/log/fail2ban.log" ]; then
+  LOG_TAIL=$(tail -n 20 /var/log/fail2ban.log 2>/dev/null || echo "")
+  if [ -n "$LOG_TAIL" ]; then
+    # Convert log lines to JSON array
+    LOG_ARRAY="["
+    FIRST_LINE=true
+    while IFS= read -r LINE; do
+      if [ -n "$LINE" ]; then
+        if [ "$FIRST_LINE" = true ]; then
+          FIRST_LINE=false
+        else
+          LOG_ARRAY+=","
+        fi
+        # Escape JSON
+        ESCAPED_LINE=$(echo "$LINE" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+        LOG_ARRAY+="\"$ESCAPED_LINE\""
+      fi
+    done <<< "$LOG_TAIL"
+    LOG_ARRAY+="]"
+    LOG_LINES="$LOG_ARRAY"
+  fi
+fi
+
+# Get agent server URL (if configured)
+AGENT_PORT=$(jq -r '.listenPort // .port // 4040' "$CONFIG_FILE" 2>/dev/null || echo "4040")
+REMOTE_URL=""
+
+# Try to get primary IP
+PRIMARY_IP=$(ip route get 8.8.8.8 2>/dev/null | awk '{print $7; exit}' || hostname -I 2>/dev/null | awk '{print $1}' || echo "")
+if [ -n "$PRIMARY_IP" ] && [ "$PRIMARY_IP" != " " ]; then
+  REMOTE_URL="http://${PRIMARY_IP}:${AGENT_PORT}"
+fi
+
+# Build payload
+PAYLOAD=$(cat <<EOF
+{
+  "serverId": "$SERVER_ID",
+  "timestamp": $(date +%s),
+  "jails": $JAILS_JSON,
+  "bans": $BANS_JSON,
+  "logTail": $LOG_LINES,
+  "remoteUrl": "$REMOTE_URL"
+}
+EOF
+)
+
+# Send to HQ
+RESPONSE=$(curl -s -w "\n%{http_code}" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Sentinel-ID: $SERVER_ID" \
+  -H "X-Sentinel-Key: $SECRET" \
+  -d "$PAYLOAD" \
+  "$HQ_URL/api/agent/push" 2>&1)
+
+# Extract HTTP code
+HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+BODY=$(echo "$RESPONSE" | head -n-1)
+
+# Check response
+if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 201 ]; then
+  echo "Successfully pushed data to HQ (HTTP $HTTP_CODE)" >&2
+  exit 0
+else
+  echo "ERROR: Failed to push data to HQ (HTTP $HTTP_CODE)" >&2
+  echo "Response: $BODY" >&2
+  exit 1
+fi
+

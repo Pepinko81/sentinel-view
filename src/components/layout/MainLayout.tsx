@@ -16,7 +16,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         <main className="flex-1 overflow-auto">
-          <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <header className="keynote-header sticky top-0 z-10 flex h-14 items-center gap-4 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <SidebarTrigger className="text-muted-foreground hover:text-primary" />
             <div className="flex items-center gap-3">
               <img
@@ -41,7 +41,7 @@ export function MainLayout({ children }: MainLayoutProps) {
               <span className="cursor-blink" />
             </div>
           </header>
-          <div className="p-6">{children}</div>
+          <div className="p-6 page-transition">{children}</div>
         </main>
       </div>
     </SidebarProvider>

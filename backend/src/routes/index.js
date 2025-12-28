@@ -6,6 +6,8 @@ const systemRouter = require('./system');
 const filtersRouter = require('./filters');
 const bansRouter = require('./bans');
 const jailConfigRouter = require('./jailConfig');
+const agentRouter = require('./agent');
+const serversRouter = require('./servers');
 
 // Mount routes
 router.use('/jails', jailsRouter);
@@ -13,6 +15,8 @@ router.use('/system', systemRouter);
 router.use('/filters', filtersRouter);
 router.use('/bans', bansRouter);
 router.use('/jail-config', jailConfigRouter);
+router.use('/agent', agentRouter);
+router.use('/servers', serversRouter);
 
 module.exports = router;
 

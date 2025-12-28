@@ -41,16 +41,15 @@ export function JailTable({
 
   if (jails.length === 0) {
     return (
-      <div className="terminal-card p-8 text-center">
+      <div className="keynote-glass fade-in-keynote p-8 text-center">
         <p className="font-mono text-muted-foreground">No jails found</p>
       </div>
     );
   }
 
   return (
-    <div className="terminal-card overflow-hidden">
-      <div className="scanlines" />
-      <table className="relative z-10 w-full">
+    <div className="keynote-glass fade-in-keynote overflow-hidden">
+      <table className="keynote-table relative z-10 w-full">
         <thead>
           <tr className="border-b border-border bg-muted/50">
             <th className="w-10 p-3" />

@@ -1,0 +1,442 @@
+/* Liquid Glass Ultra Theme - Apple iOS 26 Keynote Aesthetic */
+/* Bold, vivid, premium glass morphism with dramatic visual impact */
+
+:root {
+  /* Ultra Glass Background Colors - Reduced contrast by 50% */
+  --glass-bg-ultra: rgba(255, 255, 255, 0.14);
+  --glass-bg-strong: rgba(255, 255, 255, 0.16);
+  --glass-bg-subtle: rgba(255, 255, 255, 0.11);
+  --glass-highlight-ultra: rgba(255, 255, 255, 0.22);
+  --glass-border-ultra: rgba(255, 255, 255, 0.19);
+  
+  /* Slightly lighter background - Reduced contrast */
+  --bg-ultra-dark: #0A0A0A;
+  --bg-gradient-start: #0A0A0A;
+  --bg-gradient-end: #0A0A0A;
+  
+  /* Neon Accent Colors */
+  --accent-neon-cyan: #47E8FF;
+  --accent-neon-blue: #00E0FF;
+  --accent-glow-cyan: rgba(71, 232, 255, 0.5);
+  --accent-glow-strong: rgba(71, 232, 255, 0.7);
+  
+  /* Ultra Blur Values - Maximum glass blur effect */
+  --blur-ultra: blur(48px);
+  --blur-strong: blur(56px);
+  --blur-subtle: blur(36px);
+  
+  /* Shadow System - Dual Depth */
+  --shadow-glass-soft: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-glass-sharp: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-glass-combined: 0 8px 32px rgba(0, 0, 0, 0.4), 
+                           0 2px 8px rgba(0, 0, 0, 0.2),
+                           0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-glass-hover: 0 12px 48px rgba(0, 0, 0, 0.5),
+                         0 4px 16px rgba(0, 0, 0, 0.3),
+                         0 6px 20px rgba(0, 0, 0, 0.25);
+  --shadow-glow-cyan: 0 0 24px var(--accent-glow-cyan),
+                      0 0 48px var(--accent-glow-strong);
+  
+  /* Border Radius */
+  --radius-ultra: 24px;
+  --radius-large: 20px;
+  --radius-medium: 16px;
+}
+
+/* Reduced contrast background */
+body {
+  background: #0A0A0A;
+  background-image: 
+    radial-gradient(ellipse at top, rgba(71, 232, 255, 0.06) 0%, transparent 70%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* Ultra Glass Card Base - Reduced contrast */
+.glass-ultra {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(52px);
+  -webkit-backdrop-filter: blur(52px);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: var(--radius-ultra);
+  box-shadow: var(--shadow-glass-combined),
+              inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Light Streak Reflection at Top - Reduced contrast */
+.glass-ultra::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 15%,
+    rgba(255, 255, 255, 0.4) 50%,
+    rgba(255, 255, 255, 0.3) 85%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.8;
+  box-shadow: 0 1px 4px rgba(255, 255, 255, 0.1);
+}
+
+/* Hover State - Reduced contrast */
+.glass-ultra:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-glass-hover),
+              inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(60px);
+  -webkit-backdrop-filter: blur(60px);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* Active/Click State - Micro Interaction */
+.glass-ultra:active {
+  transform: translateY(0) scale(0.98);
+  transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Ultra Glass Modal - Reduced contrast */
+.glass-modal-ultra {
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(64px);
+  -webkit-backdrop-filter: blur(64px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-ultra);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5),
+              0 8px 24px rgba(0, 0, 0, 0.3),
+              inset 0 1px 0 rgba(255, 255, 255, 0.25),
+              inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Ultra Glass Sidebar - Reduced contrast */
+.glass-sidebar-ultra {
+  background: rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(52px);
+  -webkit-backdrop-filter: blur(52px);
+  border-right: 1px solid rgba(255, 255, 255, 0.19);
+  box-shadow: 4px 0 32px rgba(0, 0, 0, 0.3),
+              inset -1px 0 0 rgba(255, 255, 255, 0.05);
+  position: relative;
+}
+
+.glass-sidebar-ultra::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    rgba(255, 255, 255, 0.4),
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  box-shadow: 0 1px 3px rgba(255, 255, 255, 0.1);
+}
+
+/* Ultra Glass Header - Reduced contrast */
+.glass-header-ultra {
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(52px);
+  -webkit-backdrop-filter: blur(52px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.19);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.3),
+              inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  position: relative;
+}
+
+.glass-header-ultra::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    rgba(255, 255, 255, 0.4),
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  box-shadow: 0 1px 3px rgba(255, 255, 255, 0.1);
+}
+
+/* Ultra Stat Card - Reduced contrast */
+.glass-stat-ultra {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(52px);
+  -webkit-backdrop-filter: blur(52px);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: var(--radius-ultra);
+  box-shadow: var(--shadow-glass-combined),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 24px;
+}
+
+.glass-stat-ultra::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.35),
+    rgba(255, 255, 255, 0.45),
+    rgba(255, 255, 255, 0.35),
+    transparent
+  );
+  opacity: 0.9;
+  box-shadow: 0 1px 5px rgba(255, 255, 255, 0.15);
+}
+
+.glass-stat-ultra:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-glass-hover),
+              inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.19);
+  backdrop-filter: blur(60px);
+  -webkit-backdrop-filter: blur(60px);
+}
+
+/* Neon Accent Button */
+.btn-neon-ultra {
+  background: linear-gradient(135deg, var(--accent-neon-cyan) 0%, var(--accent-neon-blue) 100%);
+  color: #05060A;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-weight: 600;
+  box-shadow: var(--shadow-glow-cyan);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-neon-ultra::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.btn-neon-ultra:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 32px var(--accent-glow-strong),
+              0 0 64px var(--accent-glow-cyan),
+              0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.btn-neon-ultra:hover::before {
+  left: 100%;
+}
+
+.btn-neon-ultra:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Success Flash Animation */
+@keyframes flash-success {
+  0%, 100% { background: linear-gradient(135deg, var(--accent-neon-cyan) 0%, var(--accent-neon-blue) 100%); }
+  50% { background: linear-gradient(135deg, #5AFFFF 0%, #1AFFFF 100%); }
+}
+
+.btn-neon-ultra.flash {
+  animation: flash-success 0.3s ease-out;
+}
+
+/* Ultra Glass Table - Reduced contrast */
+.glass-table-ultra {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(44px);
+  -webkit-backdrop-filter: blur(44px);
+  border-radius: var(--radius-large);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.glass-table-ultra thead {
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(44px);
+  -webkit-backdrop-filter: blur(44px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.glass-table-ultra tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background 0.2s ease;
+}
+
+.glass-table-ultra tbody tr:hover {
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(48px);
+  -webkit-backdrop-filter: blur(48px);
+}
+
+/* Ultra Glass Input - Reduced contrast */
+.glass-input-ultra {
+  background: rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(36px);
+  -webkit-backdrop-filter: blur(36px);
+  border: 1px solid rgba(255, 255, 255, 0.19);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: rgba(255, 255, 255, 0.9);
+  transition: all 0.2s ease;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.05);
+}
+
+.glass-input-ultra:focus {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: var(--accent-neon-cyan);
+  box-shadow: 0 0 0 3px var(--accent-glow-cyan),
+              0 4px 16px rgba(0, 0, 0, 0.3),
+              inset 0 1px 2px rgba(255, 255, 255, 0.08);
+  outline: none;
+  backdrop-filter: blur(44px);
+  -webkit-backdrop-filter: blur(44px);
+}
+
+/* Ultra Glass Tabs - Reduced contrast */
+.glass-tabs-ultra {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(44px);
+  -webkit-backdrop-filter: blur(44px);
+  border-radius: 12px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.glass-tab-ultra {
+  background: transparent;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  padding: 8px 16px;
+}
+
+.glass-tab-ultra[data-state="active"] {
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(48px);
+  -webkit-backdrop-filter: blur(48px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: var(--accent-neon-cyan);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Ultra Glass Badge - Reduced contrast */
+.glass-badge-ultra {
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid rgba(255, 255, 255, 0.19);
+  border-radius: 8px;
+  padding: 4px 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Ultra Glass Alert - Reduced contrast */
+.glass-alert-ultra {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(52px);
+  -webkit-backdrop-filter: blur(52px);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: var(--radius-large);
+  box-shadow: var(--shadow-glass-combined),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Ultra Glass Log Window - Reduced contrast */
+.glass-log-ultra {
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(56px);
+  -webkit-backdrop-filter: blur(56px);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: var(--radius-large);
+  box-shadow: var(--shadow-glass-combined),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Fade-in Animation */
+@keyframes fade-in-ultra {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-ultra {
+  animation: fade-in-ultra 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Neon Glow Text for Stats */
+.text-neon-glow {
+  text-shadow: 0 0 10px var(--accent-glow-cyan),
+               0 0 20px var(--accent-glow-cyan),
+               0 0 30px var(--accent-glow-strong);
+  color: var(--accent-neon-cyan);
+}
+
+/* Large Bold Numbers with Glow */
+.stat-number-ultra {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--accent-neon-cyan);
+  text-shadow: 0 0 12px var(--accent-glow-cyan),
+               0 0 24px var(--accent-glow-cyan);
+  letter-spacing: -0.02em;
+}
+
+/* Fallback for browsers without backdrop-filter */
+@supports not (backdrop-filter: blur(24px)) {
+  .glass-ultra,
+  .glass-modal-ultra,
+  .glass-sidebar-ultra,
+  .glass-header-ultra,
+  .glass-stat-ultra,
+  .glass-table-ultra,
+  .glass-input-ultra,
+  .glass-tabs-ultra,
+  .glass-badge-ultra,
+  .glass-alert-ultra,
+  .glass-log-ultra {
+    background: rgba(20, 24, 32, 0.95);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+

@@ -99,10 +99,10 @@ export default function LiveLog() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-mono text-2xl font-bold text-foreground terminal-glow">
-              <span className="text-primary">&gt;</span> Live Log
+            <h1 className="keynote-title font-mono text-foreground terminal-glow">
+              <span className="text-[var(--accent)]">&gt;</span> Live Log
             </h1>
-            <p className="font-mono text-sm text-muted-foreground">
+            <p className="keynote-subtitle font-mono text-muted-foreground mt-2">
               Real-time fail2ban log stream
             </p>
           </div>
@@ -129,15 +129,14 @@ export default function LiveLog() {
         </div>
 
         {error && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="keynote-glass fade-in-keynote">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Connection Error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
-        <div className="terminal-card">
-          <div className="scanlines" />
+        <div className="keynote-glass fade-in-keynote">
           <div className="relative z-10 p-4">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -157,7 +156,7 @@ export default function LiveLog() {
             </div>
             <div
               ref={logContainerRef}
-              className="font-mono text-xs h-[600px] overflow-y-auto bg-background/50 p-4 rounded border border-border"
+              className="font-mono text-xs h-[600px] overflow-y-auto bg-background/30 p-4 rounded-lg border border-border/30 backdrop-blur-sm"
             >
               {logs.length === 0 ? (
                 <div className="text-muted-foreground text-center py-8">

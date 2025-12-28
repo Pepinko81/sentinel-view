@@ -1,4 +1,4 @@
-import { LayoutDashboard, Shield, FileText, FileCode, Radio } from "lucide-react";
+import { LayoutDashboard, Shield, FileText, FileCode, Radio, Server } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import Logo from "@/assets/pepinko-logo.png";
 import LogoDark from "@/assets/pepinko-logo-dark.png";
@@ -19,6 +19,7 @@ import {
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Jails", url: "/jails", icon: Shield },
+  { title: "Servers", url: "/servers", icon: Server },
   { title: "Create Filter", url: "/filters/create", icon: FileText },
   { title: "Live Log", url: "/logs", icon: Radio },
 ];

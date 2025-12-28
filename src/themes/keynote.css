@@ -1,0 +1,436 @@
+/* Apple Keynote-Grade UI Theme - Level 3 Polish */
+/* Cinematic depth, motion, and premium aesthetics */
+
+:root {
+  /* Keynote Color Palette */
+  --bg-dark: #030408;
+  --bg-gradient1: #07111e;
+  --bg-gradient2: #0e1b2e;
+  --accent: #3af0ff;
+  --accent-glow: rgba(58, 240, 255, 0.45);
+  --accent-glow-strong: rgba(58, 240, 255, 0.65);
+  --glass: rgba(255, 255, 255, 0.14);
+  --glass-hover: rgba(255, 255, 255, 0.18);
+  --glass-border: rgba(255, 255, 255, 0.25);
+  --glass-highlight: rgba(255, 255, 255, 0.35);
+  
+  /* Typography Scale */
+  --title-size: 48px;
+  --subtitle-size: 20px;
+  --number-size: 42px;
+  --description-size: 14px;
+  
+  /* Shadows - Dual Layer */
+  --shadow-soft: 0 24px 48px rgba(0, 0, 0, 0.45);
+  --shadow-neon: 0 0 8px var(--accent-glow);
+  --shadow-combined: 0 24px 48px rgba(0, 0, 0, 0.45),
+                     0 0 12px var(--accent-glow),
+                     0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-hover: 0 32px 64px rgba(0, 0, 0, 0.5),
+                  0 0 16px var(--accent-glow-strong),
+                  0 12px 32px rgba(0, 0, 0, 0.4);
+  
+  /* Blur */
+  --blur-keynote: blur(32px);
+  --blur-strong: blur(40px);
+}
+
+/* Animated Background Canvas */
+#keynote-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Body with Keynote Background */
+body {
+  background: var(--bg-dark);
+  background-image: 
+    radial-gradient(ellipse at 20% 30%, rgba(58, 240, 255, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 70%, rgba(138, 43, 226, 0.06) 0%, transparent 50%),
+    linear-gradient(135deg, var(--bg-gradient1) 0%, var(--bg-gradient2) 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Light Streak Overlay */
+.keynote-streak {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  animation: streak-pulse 6s ease-in-out infinite;
+  background: linear-gradient(
+    135deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.03) 20%,
+    rgba(58, 240, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0.03) 80%,
+    transparent 100%
+  );
+}
+
+@keyframes streak-pulse {
+  0%, 100% { opacity: 0; }
+  25% { opacity: 0.4; }
+  50% { opacity: 0.6; }
+  75% { opacity: 0.3; }
+}
+
+/* Keynote Glass Card - Floating with Depth */
+.keynote-glass {
+  background: var(--glass);
+  backdrop-filter: var(--blur-keynote);
+  -webkit-backdrop-filter: var(--blur-keynote);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  box-shadow: var(--shadow-combined);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateY(-2px);
+  animation: float-idle 3s ease-in-out infinite;
+}
+
+@keyframes float-idle {
+  0%, 100% { transform: translateY(-2px); }
+  50% { transform: translateY(-4px); }
+}
+
+/* Light Streak on Card Top */
+.keynote-glass::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--glass-highlight) 20%,
+    var(--accent-glow) 50%,
+    var(--glass-highlight) 80%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.8;
+  animation: streak-shimmer 4s ease-in-out infinite;
+}
+
+@keyframes streak-shimmer {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* Hover State - Lift Higher */
+.keynote-glass:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-hover);
+  border-color: rgba(255, 255, 255, 0.35);
+  background: var(--glass-hover);
+  backdrop-filter: var(--blur-strong);
+  -webkit-backdrop-filter: var(--blur-strong);
+}
+
+/* Active/Click State */
+.keynote-glass:active {
+  transform: translateY(-4px) scale(0.98);
+  transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Keynote Stat Card */
+.keynote-stat {
+  background: var(--glass);
+  backdrop-filter: var(--blur-keynote);
+  -webkit-backdrop-filter: var(--blur-keynote);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  box-shadow: var(--shadow-combined);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateY(-2px);
+  animation: float-idle 3s ease-in-out infinite;
+  padding: 28px;
+}
+
+.keynote-stat::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--glass-highlight),
+    var(--accent-glow),
+    var(--glass-highlight),
+    transparent
+  );
+  opacity: 0.9;
+}
+
+.keynote-stat:hover {
+  transform: translateY(-8px);
+  box-shadow: var(--shadow-hover);
+  border-color: rgba(255, 255, 255, 0.4);
+  background: var(--glass-hover);
+}
+
+/* Keynote Typography */
+.keynote-title {
+  font-size: var(--title-size);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.keynote-subtitle {
+  font-size: var(--subtitle-size);
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.keynote-number {
+  font-size: var(--number-size);
+  font-weight: 600;
+  color: var(--accent);
+  text-shadow: 0 0 8px var(--accent-glow),
+               0 0 16px var(--accent-glow);
+  letter-spacing: -0.03em;
+}
+
+.keynote-description {
+  font-size: var(--description-size);
+  opacity: 0.7;
+  line-height: 1.5;
+}
+
+/* Neon Button - Keynote Style */
+.keynote-button {
+  background: linear-gradient(135deg, var(--accent) 0%, #2dd4e6 100%);
+  color: var(--bg-dark);
+  border: none;
+  border-radius: 12px;
+  padding: 14px 28px;
+  font-weight: 600;
+  font-size: 15px;
+  box-shadow: var(--shadow-neon),
+              0 4px 16px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.keynote-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.4),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.keynote-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px var(--accent-glow-strong),
+              0 0 40px var(--accent-glow),
+              0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.keynote-button:hover::before {
+  left: 100%;
+}
+
+.keynote-button:active {
+  transform: translateY(0) scale(0.94);
+  transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Keynote Sidebar */
+.keynote-sidebar {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: var(--blur-keynote);
+  -webkit-backdrop-filter: var(--blur-keynote);
+  border-right: 1px solid var(--glass-border);
+  box-shadow: 4px 0 32px rgba(0, 0, 0, 0.4);
+  position: relative;
+}
+
+.keynote-sidebar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--glass-highlight),
+    transparent
+  );
+}
+
+/* Keynote Header */
+.keynote-header {
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: var(--blur-keynote);
+  -webkit-backdrop-filter: var(--blur-keynote);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+.keynote-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--glass-highlight),
+    transparent
+  );
+}
+
+/* Keynote Table */
+.keynote-table {
+  background: rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+}
+
+.keynote-table thead {
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+}
+
+.keynote-table tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background 0.2s ease;
+}
+
+.keynote-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Keynote Modal */
+.keynote-modal {
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: var(--blur-strong);
+  -webkit-backdrop-filter: var(--blur-strong);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  box-shadow: var(--shadow-hover);
+}
+
+/* Keynote Tabs */
+.keynote-tabs {
+  background: rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border-radius: 12px;
+  padding: 4px;
+  border: 1px solid var(--glass-border);
+}
+
+.keynote-tab {
+  background: transparent;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  padding: 8px 16px;
+}
+
+.keynote-tab[data-state="active"] {
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  color: var(--accent);
+}
+
+/* Sequential Fade-in Animation */
+@keyframes fade-in-sequential {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-keynote {
+  animation: fade-in-sequential 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  opacity: 0;
+}
+
+.fade-in-keynote:nth-child(1) { animation-delay: 0ms; }
+.fade-in-keynote:nth-child(2) { animation-delay: 80ms; }
+.fade-in-keynote:nth-child(3) { animation-delay: 160ms; }
+.fade-in-keynote:nth-child(4) { animation-delay: 240ms; }
+.fade-in-keynote:nth-child(5) { animation-delay: 320ms; }
+.fade-in-keynote:nth-child(6) { animation-delay: 400ms; }
+
+/* Page Transition */
+@keyframes page-fade-slide {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.page-transition {
+  animation: page-fade-slide 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Fallback for browsers without backdrop-filter */
+@supports not (backdrop-filter: blur(32px)) {
+  .keynote-glass,
+  .keynote-stat,
+  .keynote-sidebar,
+  .keynote-header,
+  .keynote-table,
+  .keynote-modal,
+  .keynote-tabs {
+    background: rgba(15, 20, 30, 0.95);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
