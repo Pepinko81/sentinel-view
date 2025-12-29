@@ -61,6 +61,32 @@ export default function ServerDetail() {
     refetchInterval: 30000,
   });
 
+  // Normalize bans to array format (must be before any conditional returns)
+  const bansArray = data?.server 
+    ? (Array.isArray(data.server.bans) 
+        ? data.server.bans 
+        : typeof data.server.bans === 'number' 
+          ? [] 
+          : data.server.bans || [])
+    : [];
+
+  // Debug: Log server data to console (must be before any conditional returns)
+  useEffect(() => {
+    if (data?.server) {
+      console.log('[ServerDetail] Server data:', {
+        id: data.server.id,
+        name: data.server.name,
+        online: data.server.online,
+        jailsCount: data.server.jails?.length || 0,
+        bansCount: bansArray.length,
+        hasJails: !!data.server.jails,
+        hasBans: bansArray.length > 0,
+        jails: data.server.jails,
+        bans: bansArray,
+      });
+    }
+  }, [data, bansArray]);
+
   const unbanMutation = useMutation({
     mutationFn: ({ jail, ip }: { jail: string; ip: string }) =>
       unbanServerIP(id!, jail, ip),
@@ -150,30 +176,6 @@ export default function ServerDetail() {
   }
 
   const server = data.server;
-  
-  // Normalize bans to array format
-  const bansArray = Array.isArray(server.bans) 
-    ? server.bans 
-    : typeof server.bans === 'number' 
-      ? [] 
-      : server.bans || [];
-  
-  // Debug: Log server data to console
-  useEffect(() => {
-    if (server) {
-      console.log('[ServerDetail] Server data:', {
-        id: server.id,
-        name: server.name,
-        online: server.online,
-        jailsCount: server.jails?.length || 0,
-        bansCount: bansArray.length,
-        hasJails: !!server.jails,
-        hasBans: bansArray.length > 0,
-        jails: server.jails,
-        bans: bansArray,
-      });
-    }
-  }, [server, bansArray]);
 
   return (
     <MainLayout>
