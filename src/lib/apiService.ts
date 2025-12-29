@@ -416,7 +416,7 @@ export interface Server {
   ip: string | null;
   lastSeen: number;
   createdAt: number;
-  bans?: number;
+  bans?: Array<{ jail: string; ip: string }> | number; // Can be array of bans or count
   online?: boolean;
   jails?: Array<{ name: string; enabled: boolean; bans: number }>;
   logTail?: string[];

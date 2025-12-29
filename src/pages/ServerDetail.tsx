@@ -151,6 +151,13 @@ export default function ServerDetail() {
 
   const server = data.server;
   
+  // Normalize bans to array format
+  const bansArray = Array.isArray(server.bans) 
+    ? server.bans 
+    : typeof server.bans === 'number' 
+      ? [] 
+      : server.bans || [];
+  
   // Debug: Log server data to console
   useEffect(() => {
     if (server) {
@@ -159,14 +166,14 @@ export default function ServerDetail() {
         name: server.name,
         online: server.online,
         jailsCount: server.jails?.length || 0,
-        bansCount: server.bans?.length || 0,
+        bansCount: bansArray.length,
         hasJails: !!server.jails,
-        hasBans: !!server.bans,
+        hasBans: bansArray.length > 0,
         jails: server.jails,
-        bans: server.bans,
+        bans: bansArray,
       });
     }
-  }, [server]);
+  }, [server, bansArray]);
 
   return (
     <MainLayout>
@@ -220,7 +227,7 @@ export default function ServerDetail() {
               <div>
                 <p className="font-mono text-xs text-muted-foreground">Active Bans</p>
                 <p className="keynote-number font-mono font-semibold">
-                  {server.bans?.length || 0}
+                  {bansArray.length}
                 </p>
               </div>
             </div>
@@ -353,13 +360,13 @@ export default function ServerDetail() {
           <h2 className="font-mono text-lg font-semibold mb-4 flex items-center gap-2">
             <Ban className="h-5 w-5" />
             Active Bans
-            {server.bans && server.bans.length > 0 && (
+            {bansArray.length > 0 && (
               <span className="font-mono text-xs text-muted-foreground ml-2">
-                ({server.bans.length})
+                ({bansArray.length})
               </span>
             )}
           </h2>
-          {server.bans && server.bans.length > 0 ? (
+          {bansArray.length > 0 ? (
             <div className="keynote-table overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -370,7 +377,7 @@ export default function ServerDetail() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {server.bans.map((ban, index) => (
+                  {bansArray.map((ban, index) => (
                     <TableRow key={`${ban.jail}-${ban.ip}-${index}`}>
                       <TableCell className="font-mono">{ban.jail}</TableCell>
                       <TableCell className="font-mono font-semibold">{ban.ip}</TableCell>
@@ -401,7 +408,7 @@ export default function ServerDetail() {
               <Ban className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
               <p className="font-mono text-muted-foreground">No active bans</p>
               <p className="font-mono text-xs text-muted-foreground mt-2">
-                {server.bans === undefined 
+                {!server.bans || (typeof server.bans === 'number' && server.bans === 0)
                   ? "Waiting for agent to send data..." 
                   : "No IPs are currently banned"}
               </p>
