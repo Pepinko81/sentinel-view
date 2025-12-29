@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -152,7 +152,7 @@ export default function ServerDetail() {
   const server = data.server;
   
   // Debug: Log server data to console
-  React.useEffect(() => {
+  useEffect(() => {
     if (server) {
       console.log('[ServerDetail] Server data:', {
         id: server.id,
