@@ -61,9 +61,14 @@ app.get('/', (req, res) => {
 app.use('/api/login', authRoutes);
 app.use('/api/auth', authRoutes);
 
+// Agent routes (use X-Sentinel-ID/X-Sentinel-Key authentication, not JWT)
+// Mount before requireAuth middleware
+const agentRoutes = require('./routes/agent');
+app.use('/api/agent', agentRoutes);
+
 // API routes (require authentication if enabled)
 if (env.AUTH_ENABLED) {
-  // Apply auth middleware to all /api routes (auth routes already handled above)
+  // Apply auth middleware to all /api routes (auth routes and agent routes already handled above)
   app.use('/api', requireAuth, apiRoutes);
 } else {
   // Auth disabled - allow all requests

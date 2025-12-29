@@ -46,8 +46,11 @@ fi
 # Collect fail2ban status
 echo "Collecting fail2ban status..." >&2
 
-# Get global status
-GLOBAL_STATUS=$(fail2ban-client status 2>/dev/null || echo "")
+# Get global status (fail2ban-client requires root, but service runs as root)
+GLOBAL_STATUS=$(fail2ban-client status 2>&1 || echo "")
+if [ -z "$GLOBAL_STATUS" ]; then
+  echo "WARNING: fail2ban-client returned empty status" >&2
+fi
 
 # Extract jail names
 JAIL_NAMES=$(echo "$GLOBAL_STATUS" | grep -E "^\s+Jail list:" | sed 's/.*Jail list:\s*//' | tr ',' ' ' | xargs)
@@ -174,9 +177,24 @@ RESPONSE=$(curl -s -w "\n%{http_code}" \
   -d "$PAYLOAD" \
   "$HQ_URL/api/agent/push" 2>&1)
 
+# Check if curl failed
+CURL_EXIT=$?
+if [ $CURL_EXIT -ne 0 ]; then
+  echo "ERROR: curl failed with exit code $CURL_EXIT" >&2
+  echo "Response: $RESPONSE" >&2
+  exit 1
+fi
+
 # Extract HTTP code
 HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
 BODY=$(echo "$RESPONSE" | head -n-1)
+
+# Validate HTTP_CODE is a number
+if ! [[ "$HTTP_CODE" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: Invalid HTTP code received: '$HTTP_CODE'" >&2
+  echo "Full response: $RESPONSE" >&2
+  exit 1
+fi
 
 # Check response
 if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 201 ]; then

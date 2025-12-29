@@ -1,0 +1,7 @@
+{
+  "serverId": "c97eca93-9d21-4920-b580-6ae2ed0060b7",
+  "secret": "dev-token-change-me",
+  "hqUrl": "http://localhost:3010",
+  "listenPort": 4040
+}
+

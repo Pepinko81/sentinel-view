@@ -6,7 +6,7 @@ const systemRouter = require('./system');
 const filtersRouter = require('./filters');
 const bansRouter = require('./bans');
 const jailConfigRouter = require('./jailConfig');
-const agentRouter = require('./agent');
+// Note: agentRouter is mounted separately in index.js (before requireAuth)
 const serversRouter = require('./servers');
 
 // Mount routes
@@ -15,7 +15,7 @@ router.use('/system', systemRouter);
 router.use('/filters', filtersRouter);
 router.use('/bans', bansRouter);
 router.use('/jail-config', jailConfigRouter);
-router.use('/agent', agentRouter);
+// Note: /agent is mounted in index.js before requireAuth middleware
 router.use('/servers', serversRouter);
 
 module.exports = router;
