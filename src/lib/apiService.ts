@@ -406,3 +406,80 @@ export const writeJailConfig = async (
   }
 };
 
+/**
+ * Server Management API
+ */
+
+export interface Server {
+  id: string;
+  name: string;
+  ip: string | null;
+  lastSeen: number;
+  createdAt: number;
+  bans?: Array<{ jail: string; ip: string }> | number; // Can be array of bans or count
+  online?: boolean;
+  jails?: Array<{ name: string; enabled: boolean; bans: number }>;
+  logTail?: string[];
+}
+
+export interface ServersResponse {
+  success: boolean;
+  servers: Server[];
+  count: number;
+}
+
+export interface ServerResponse {
+  success: boolean;
+  server: Server;
+}
+
+/**
+ * Fetch all servers
+ * GET /api/servers
+ */
+export const fetchServers = async (): Promise<ServersResponse> => {
+  const response = await apiClient.get<ServersResponse>('/api/servers');
+  return response;
+};
+
+/**
+ * Fetch server details
+ * GET /api/servers/:id
+ */
+export const fetchServer = async (id: string): Promise<ServerResponse> => {
+  const response = await apiClient.get<ServerResponse>(`/api/servers/${encodeURIComponent(id)}`);
+  return response;
+};
+
+/**
+ * Unban IP on server
+ * POST /api/servers/:id/unban
+ */
+export const unbanServerIP = async (
+  serverId: string,
+  jail: string,
+  ip: string
+): Promise<{ success: boolean; jail: string; ip: string; message: string }> => {
+  const response = await apiClient.post<{ success: boolean; jail: string; ip: string; message: string }>(
+    `/api/servers/${encodeURIComponent(serverId)}/unban`,
+    { jail, ip }
+  );
+  return response;
+};
+
+/**
+ * Execute action on server
+ * POST /api/servers/:id/action
+ */
+export const executeServerAction = async (
+  serverId: string,
+  action: 'start' | 'stop' | 'restart' | 'restart_fail2ban',
+  jailName?: string
+): Promise<{ success: boolean; action: string; jail?: string; message: string }> => {
+  const response = await apiClient.post<{ success: boolean; action: string; jail?: string; message: string }>(
+    `/api/servers/${encodeURIComponent(serverId)}/action`,
+    { action, jailName }
+  );
+  return response;
+};
+

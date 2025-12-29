@@ -5,13 +5,53 @@ const { discoverConfiguredJails, getJailRuntimeState } = require('../services/ja
 const { inferCategory } = require('../utils/jailClassifier');
 const { getFilterName, filterFileExists } = require('../services/filterManager');
 const { serializeJail } = require('../services/serializers/apiSerializer');
+const servers = require('../services/servers');
 
 /**
  * GET /api/jails
  * Get all jails with their status (both enabled and disabled)
+ * Query: ?server=id (optional - filter by server)
  */
 router.get('/', async (req, res, next) => {
   try {
+    const serverId = req.query.server;
+    
+    // If server specified, get jails from that server
+    if (serverId && serverId !== 'local') {
+      const server = servers.getServerById(serverId);
+      if (!server) {
+        return res.status(404).json({
+          success: false,
+          error: 'Server not found',
+        });
+      }
+      
+      // Convert server jails to expected format
+      const jails = (server.jails || []).map(jail => {
+        const category = inferCategory(jail.name);
+        return serializeJail({
+          name: jail.name,
+          enabled: jail.enabled || false,
+          category: category,
+          failures_current: jail.bans || 0,
+          failures_total: jail.bans || 0,
+          bans_active: jail.bans || 0,
+          bans_total: jail.bans || 0,
+          last_ban: null,
+          bannedIPs: [],
+          filter: null,
+        });
+      });
+      
+      return res.json({
+        success: true,
+        jails,
+        lastUpdated: new Date(server.lastSeen).toISOString(),
+        serverStatus: server.online ? 'online' : 'offline',
+        server: serverId,
+      });
+    }
+    
     console.log('[JAILS API] GET /api/jails - Starting request');
     
     // Discover all configured jails from config files
@@ -130,6 +170,7 @@ router.get('/', async (req, res, next) => {
       jails,
       lastUpdated: new Date().toISOString(),
       serverStatus: serverStatus,
+      server: 'local',
     });
   } catch (err) {
     next(err);

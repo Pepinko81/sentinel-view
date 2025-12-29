@@ -4,6 +4,10 @@
 
 ![Sentinel Dashboard Logo](logo.png)
 
+**✨ Apple Keynote-Grade UI** — Cinematic clarity with animated depth
+
+**Now with Apple-grade Liquid Glass UI – cinematic clarity.**
+
 **The modern, production-ready web interface for monitoring and managing fail2ban**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -29,16 +33,16 @@ curl -s https://raw.githubusercontent.com/Pepinko81/sentinel-view/main/install.s
 
 <div align="center">
 
-![Dashboard Overview](./screenshots/overview_dashboard.png)
-*Real-time overview of all jails, active bans, and security metrics*
+![Dashboard Overview](./docs/screenshots/keynote_dashboard.png)
+*Real-time overview with Apple keynote-grade UI, animated canvas, and cinematic depth*
 
 </div>
 
-![Active Bans](./screenshots/active_bans.png)
-*View active bans, ban history, and manage IP addresses with one click*
+![Active Bans](./docs/screenshots/keynote_bans.png)
+*View active bans with floating glass cards and neon accents*
 
-![Live Logs](./screenshots/live_logs.png)
-*Stream fail2ban logs in real-time via WebSocket*
+![Live Logs](./docs/screenshots/keynote_logs.png)
+*Stream fail2ban logs in real-time via WebSocket with premium glass window*
 
 ---
 

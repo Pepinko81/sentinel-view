@@ -28,10 +28,10 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="font-mono text-2xl font-bold text-foreground terminal-glow">
-              <span className="text-primary">&gt;</span> Dashboard
+            <h1 className="keynote-title font-mono text-foreground terminal-glow">
+              <span className="text-[var(--accent)]">&gt;</span> Dashboard
             </h1>
-            <p className="font-mono text-sm text-muted-foreground">
+            <p className="keynote-subtitle font-mono text-muted-foreground mt-2">
               Security monitoring overview
             </p>
           </div>
@@ -97,7 +97,7 @@ export default function Dashboard() {
 
         {/* Error State */}
         {isError && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="keynote-glass fade-in-keynote">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Failed to load data</AlertTitle>
             <AlertDescription className="mt-2">
@@ -162,41 +162,48 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard
-              title="Total Banned IPs"
-              value={stats?.totalBannedIPs ?? 0}
-              icon={ShieldAlert}
-              description="Across all jails"
-              variant="destructive"
-            />
-            <StatCard
-              title="Active Jails"
-              value={stats?.activeJails ?? 0}
-              icon={Shield}
-              description="Total configured"
-              variant="default"
-            />
-            <StatCard
-              title="Enabled Jails"
-              value={stats?.enabledJails ?? 0}
-              icon={ShieldCheck}
-              description="Currently protecting"
-              variant="success"
-            />
-            <StatCard
-              title="Disabled Jails"
-              value={stats?.disabledJails ?? 0}
-              icon={ShieldOff}
-              description="Inactive protection"
-              variant="warning"
-            />
+            <div className="fade-in-keynote" style={{ animationDelay: '0ms' }}>
+              <StatCard
+                title="Total Banned IPs"
+                value={stats?.totalBannedIPs ?? 0}
+                icon={ShieldAlert}
+                description="Across all jails"
+                variant="destructive"
+              />
+            </div>
+            <div className="fade-in-keynote" style={{ animationDelay: '80ms' }}>
+              <StatCard
+                title="Active Jails"
+                value={stats?.activeJails ?? 0}
+                icon={Shield}
+                description="Total configured"
+                variant="default"
+              />
+            </div>
+            <div className="fade-in-keynote" style={{ animationDelay: '160ms' }}>
+              <StatCard
+                title="Enabled Jails"
+                value={stats?.enabledJails ?? 0}
+                icon={ShieldCheck}
+                description="Currently protecting"
+                variant="success"
+              />
+            </div>
+            <div className="fade-in-keynote" style={{ animationDelay: '240ms' }}>
+              <StatCard
+                title="Disabled Jails"
+                value={stats?.disabledJails ?? 0}
+                icon={ShieldOff}
+                description="Inactive protection"
+                variant="warning"
+              />
+            </div>
           </div>
         )}
 
         {/* Categories */}
         {!isError && stats && stats.categories.length > 0 && (
-          <div className="terminal-card p-6">
-            <div className="scanlines" />
+          <div className="keynote-glass fade-in-keynote p-6">
             <div className="relative z-10">
               <div className="mb-4 flex items-center gap-2">
                 <Activity className="h-4 w-4 text-primary" />
@@ -208,7 +215,7 @@ export default function Dashboard() {
                 {stats.categories.map((category) => (
                   <span
                     key={category}
-                    className="rounded border border-secondary/50 bg-secondary/10 px-3 py-1 font-mono text-xs text-secondary"
+                    className="keynote-glass rounded border border-[var(--glass-border)] bg-[var(--glass)] px-3 py-1 font-mono text-xs backdrop-blur-[28px]"
                   >
                     {category}
                   </span>
@@ -220,8 +227,7 @@ export default function Dashboard() {
 
         {/* Empty State - No Categories */}
         {!isLoading && !isError && stats && stats.categories.length === 0 && (
-          <div className="terminal-card p-6">
-            <div className="scanlines" />
+          <div className="keynote-glass fade-in-keynote p-6">
             <div className="relative z-10 text-center text-muted-foreground">
               <p className="font-mono text-sm">No active categories found</p>
             </div>
@@ -230,8 +236,7 @@ export default function Dashboard() {
 
         {/* System Info */}
         {!isError && (
-          <div className="terminal-card p-6">
-            <div className="scanlines" />
+          <div className="keynote-glass fade-in-keynote p-6">
             <div className="relative z-10 font-mono text-xs text-muted-foreground">
               <div className="space-y-1">
                 <p>

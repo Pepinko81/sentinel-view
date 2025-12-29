@@ -1,0 +1,14 @@
+[Unit]
+Description=Sentinel Agent - Fail2Ban Data Collector
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/sentinel-agent/agent.sh
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

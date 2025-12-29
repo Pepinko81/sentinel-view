@@ -60,10 +60,10 @@ export default function CreateFilter() {
     <MainLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="font-mono text-2xl font-bold text-foreground terminal-glow">
-            <span className="text-primary">&gt;</span> Create Filter
-          </h1>
-          <p className="font-mono text-sm text-muted-foreground">
+            <h1 className="keynote-title font-mono text-foreground terminal-glow">
+              <span className="text-[var(--accent)]">&gt;</span> Create Filter
+            </h1>
+          <p className="keynote-subtitle font-mono text-muted-foreground mt-2">
             Create a new fail2ban filter file
           </p>
         </div>
@@ -77,8 +77,7 @@ export default function CreateFilter() {
           </AlertDescription>
         </Alert>
 
-        <form onSubmit={handleSubmit} className="terminal-card">
-          <div className="scanlines" />
+        <form onSubmit={handleSubmit} className="keynote-glass fade-in-keynote">
           <div className="relative z-10 p-6 space-y-6">
             <div>
               <Label htmlFor="name" className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-2 block">

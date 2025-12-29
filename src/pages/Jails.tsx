@@ -86,10 +86,10 @@ export default function Jails() {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="font-mono text-2xl font-bold text-foreground terminal-glow">
-              <span className="text-primary">&gt;</span> Jails
+            <h1 className="keynote-title font-mono text-foreground terminal-glow">
+              <span className="text-[var(--accent)]">&gt;</span> Jails
             </h1>
-            <p className="font-mono text-sm text-muted-foreground">
+            <p className="keynote-subtitle font-mono text-muted-foreground mt-2">
               Manage fail2ban jails and banned IPs
             </p>
           </div>
@@ -140,7 +140,7 @@ export default function Jails() {
 
         {/* Error State */}
         {isError && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="keynote-glass fade-in-keynote">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Failed to load jails</AlertTitle>
             <AlertDescription className="mt-2">
@@ -176,7 +176,7 @@ export default function Jails() {
 
         {/* Tabs */}
         <Tabs defaultValue="active" className="w-full">
-          <TabsList className="font-mono">
+          <TabsList className="keynote-tabs font-mono">
             <TabsTrigger value="active">Active</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
           </TabsList>
@@ -197,24 +197,21 @@ export default function Jails() {
               </div>
             ) : isError ? (
               // Empty state when error
-              <div className="terminal-card p-6">
-                <div className="scanlines" />
+              <div className="keynote-glass fade-in-keynote p-6">
                 <div className="relative z-10 text-center text-muted-foreground">
                   <p className="font-mono text-sm">Unable to load jails data</p>
                 </div>
               </div>
             ) : jails.length === 0 ? (
               // Empty state when no jails
-              <div className="terminal-card p-6">
-                <div className="scanlines" />
+              <div className="keynote-glass fade-in-keynote p-6">
                 <div className="relative z-10 text-center text-muted-foreground">
                   <p className="font-mono text-sm">No jails configured</p>
                 </div>
               </div>
             ) : filteredJails.length === 0 ? (
               // Empty state when filters match nothing
-              <div className="terminal-card p-6">
-                <div className="scanlines" />
+              <div className="keynote-glass fade-in-keynote p-6">
                 <div className="relative z-10 text-center text-muted-foreground">
                   <p className="font-mono text-sm">No jails match the current filters</p>
                 </div>

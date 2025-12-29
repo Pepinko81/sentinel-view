@@ -87,7 +87,7 @@ export default function JailEditor() {
   if (!name) {
     return (
       <MainLayout>
-        <div className="terminal-card p-6">
+        <div className="keynote-glass fade-in-keynote p-6">
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
@@ -103,10 +103,10 @@ export default function JailEditor() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-mono text-2xl font-bold text-foreground terminal-glow">
-              <span className="text-primary">&gt;</span> Jail Editor: {name}
+            <h1 className="keynote-title font-mono text-foreground terminal-glow">
+              <span className="text-[var(--accent)]">&gt;</span> Jail Editor: {name}
             </h1>
-            <p className="font-mono text-sm text-muted-foreground">
+            <p className="keynote-subtitle font-mono text-muted-foreground mt-2">
               Edit jail configuration file
             </p>
           </div>
@@ -165,13 +165,13 @@ export default function JailEditor() {
         )}
 
         {isLoading ? (
-          <div className="terminal-card p-6">
+          <div className="keynote-glass fade-in-keynote p-6">
             <div className="flex items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
           </div>
         ) : (
-          <div className="terminal-card">
+          <div className="keynote-glass fade-in-keynote">
             <div className="scanlines" />
             <div className="relative z-10 p-6 space-y-4">
               <div>
