@@ -169,6 +169,7 @@ EOF
 )
 
 # Send to HQ
+echo "Sending data to HQ: $HQ_URL/api/agent/push" >&2
 RESPONSE=$(curl -s -w "\n%{http_code}" \
   -X POST \
   -H "Content-Type: application/json" \
@@ -185,9 +186,14 @@ if [ $CURL_EXIT -ne 0 ]; then
   exit 1
 fi
 
-# Extract HTTP code
+# Extract HTTP code (last line)
 HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+# Extract body (all lines except last)
 BODY=$(echo "$RESPONSE" | head -n-1)
+
+# Debug output
+echo "DEBUG: HTTP_CODE='$HTTP_CODE'" >&2
+echo "DEBUG: BODY length=${#BODY}" >&2
 
 # Validate HTTP_CODE is a number
 if ! [[ "$HTTP_CODE" =~ ^[0-9]+$ ]]; then
