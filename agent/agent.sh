@@ -16,10 +16,31 @@ if [ ! -f "$CONFIG_FILE" ]; then
   exit 1
 fi
 
+# Check if jq is available
+if ! command -v jq &> /dev/null; then
+  echo "ERROR: jq is required but not found. Install with: apt-get install jq" >&2
+  exit 1
+fi
+
 # Read config
 SERVER_ID=$(jq -r '.serverId' "$CONFIG_FILE" 2>/dev/null || echo "")
+if [ $? -ne 0 ] || [ -z "$SERVER_ID" ]; then
+  echo "ERROR: Failed to read serverId from config.json" >&2
+  echo "Config file: $CONFIG_FILE" >&2
+  exit 1
+fi
+
 SECRET=$(jq -r '.secret' "$CONFIG_FILE" 2>/dev/null || echo "")
+if [ $? -ne 0 ] || [ -z "$SECRET" ]; then
+  echo "ERROR: Failed to read secret from config.json" >&2
+  exit 1
+fi
+
 HQ_URL=$(jq -r '.hqUrl' "$CONFIG_FILE" 2>/dev/null || echo "")
+if [ $? -ne 0 ] || [ -z "$HQ_URL" ]; then
+  echo "ERROR: Failed to read hqUrl from config.json" >&2
+  exit 1
+fi
 
 # Validate config
 if [ -z "$SERVER_ID" ] || [ "$SERVER_ID" == "null" ]; then
@@ -47,13 +68,21 @@ fi
 echo "Collecting fail2ban status..." >&2
 
 # Get global status (fail2ban-client requires root, but service runs as root)
-GLOBAL_STATUS=$(fail2ban-client status 2>&1 || echo "")
+GLOBAL_STATUS=$(fail2ban-client status 2>&1)
+F2B_EXIT=$?
+if [ $F2B_EXIT -ne 0 ]; then
+  echo "ERROR: fail2ban-client failed with exit code $F2B_EXIT" >&2
+  echo "Output: $GLOBAL_STATUS" >&2
+  exit 1
+fi
+
 if [ -z "$GLOBAL_STATUS" ]; then
   echo "WARNING: fail2ban-client returned empty status" >&2
+  GLOBAL_STATUS=""
 fi
 
 # Extract jail names
-JAIL_NAMES=$(echo "$GLOBAL_STATUS" | grep -E "^\s+Jail list:" | sed 's/.*Jail list:\s*//' | tr ',' ' ' | xargs)
+JAIL_NAMES=$(echo "$GLOBAL_STATUS" | grep -E "^\s+Jail list:" | sed 's/.*Jail list:\s*//' | tr ',' ' ' | xargs || echo "")
 
 # Initialize arrays
 JAILS_JSON="[]"
