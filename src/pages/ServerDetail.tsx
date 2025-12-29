@@ -267,13 +267,18 @@ export default function ServerDetail() {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          {jail.enabled ? (
+                          {!server.online ? (
+                            <span className="font-mono text-xs text-muted-foreground">
+                              Offline
+                            </span>
+                          ) : jail.enabled ? (
                             <>
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleAction("stop", jail.name)}
-                                disabled={actionMutation.isPending || !server.online}
+                                disabled={actionMutation.isPending}
+                                className="font-mono"
                               >
                                 <Square className="h-3 w-3 mr-1" />
                                 Stop
@@ -282,7 +287,8 @@ export default function ServerDetail() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleAction("restart", jail.name)}
-                                disabled={actionMutation.isPending || !server.online}
+                                disabled={actionMutation.isPending}
+                                className="font-mono"
                               >
                                 <RotateCw className="h-3 w-3 mr-1" />
                                 Restart
@@ -293,7 +299,8 @@ export default function ServerDetail() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleAction("start", jail.name)}
-                              disabled={actionMutation.isPending || !server.online}
+                              disabled={actionMutation.isPending}
+                              className="font-mono"
                             >
                               <Play className="h-3 w-3 mr-1" />
                               Start
@@ -331,14 +338,21 @@ export default function ServerDetail() {
                       <TableCell className="font-mono">{ban.jail}</TableCell>
                       <TableCell className="font-mono font-semibold">{ban.ip}</TableCell>
                       <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleUnban(ban.jail, ban.ip)}
-                          disabled={unbanMutation.isPending || !server.online}
-                        >
-                          Unban
-                        </Button>
+                        {!server.online ? (
+                          <span className="font-mono text-xs text-muted-foreground">
+                            Offline
+                          </span>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleUnban(ban.jail, ban.ip)}
+                            disabled={unbanMutation.isPending}
+                            className="font-mono"
+                          >
+                            Unban
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
