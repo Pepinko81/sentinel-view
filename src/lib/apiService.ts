@@ -473,10 +473,10 @@ export const unbanServerIP = async (
  */
 export const executeServerAction = async (
   serverId: string,
-  action: 'start' | 'stop' | 'restart',
-  jailName: string
-): Promise<{ success: boolean; action: string; jail: string; message: string }> => {
-  const response = await apiClient.post<{ success: boolean; action: string; jail: string; message: string }>(
+  action: 'start' | 'stop' | 'restart' | 'restart_fail2ban',
+  jailName?: string
+): Promise<{ success: boolean; action: string; jail?: string; message: string }> => {
+  const response = await apiClient.post<{ success: boolean; action: string; jail?: string; message: string }>(
     `/api/servers/${encodeURIComponent(serverId)}/action`,
     { action, jailName }
   );

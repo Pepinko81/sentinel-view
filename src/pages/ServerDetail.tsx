@@ -84,10 +84,11 @@ export default function ServerDetail() {
   });
 
   const actionMutation = useMutation({
-    mutationFn: ({ action, jailName }: { action: "start" | "stop" | "restart"; jailName: string }) =>
+    mutationFn: ({ action, jailName }: { action: "start" | "stop" | "restart" | "restart_fail2ban"; jailName?: string }) =>
       executeServerAction(id!, action, jailName),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["server", id] });
+      queryClient.invalidateQueries({ queryKey: ["servers"] });
       toast({
         title: "Action Executed",
         description: data.message,
@@ -117,7 +118,7 @@ export default function ServerDetail() {
     }
   };
 
-  const handleAction = (action: "start" | "stop" | "restart", jailName: string) => {
+  const handleAction = (action: "start" | "stop" | "restart" | "restart_fail2ban", jailName?: string) => {
     actionMutation.mutate({ action, jailName });
   };
 
@@ -174,7 +175,7 @@ export default function ServerDetail() {
 
         {/* Status Card */}
         <Card className="keynote-glass fade-in-keynote p-6">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-3 mb-4">
             <div className="flex items-center gap-3">
               {server.online ? (
                 <Wifi className="h-6 w-6 text-green-500" />
@@ -207,6 +208,26 @@ export default function ServerDetail() {
               </div>
             </div>
           </div>
+          
+          {/* Server Actions */}
+          {server.online && (
+            <div className="pt-4 border-t border-white/10">
+              <div className="flex items-center gap-2 mb-2">
+                <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                <p className="font-mono text-xs text-muted-foreground">Server Actions</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleAction("restart_fail2ban")}
+                disabled={actionMutation.isPending}
+                className="font-mono"
+              >
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Restart Fail2ban
+              </Button>
+            </div>
+          )}
         </Card>
 
         {/* Jails Table */}
