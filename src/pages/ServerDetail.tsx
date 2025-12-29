@@ -231,12 +231,17 @@ export default function ServerDetail() {
         </Card>
 
         {/* Jails Table */}
-        {server.jails && server.jails.length > 0 && (
-          <Card className="keynote-glass fade-in-keynote p-6">
-            <h2 className="font-mono text-lg font-semibold mb-4 flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Jails
-            </h2>
+        <Card className="keynote-glass fade-in-keynote p-6">
+          <h2 className="font-mono text-lg font-semibold mb-4 flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Jails
+            {server.jails && server.jails.length > 0 && (
+              <span className="font-mono text-xs text-muted-foreground ml-2">
+                ({server.jails.length})
+              </span>
+            )}
+          </h2>
+          {server.jails && server.jails.length > 0 ? (
             <div className="keynote-table overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -313,16 +318,31 @@ export default function ServerDetail() {
                 </TableBody>
               </Table>
             </div>
-          </Card>
-        )}
+          ) : (
+            <div className="text-center py-8">
+              <Shield className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <p className="font-mono text-muted-foreground">No jails data available</p>
+              <p className="font-mono text-xs text-muted-foreground mt-2">
+                {server.jails === undefined 
+                  ? "Waiting for agent to send data..." 
+                  : "No jails found on this server"}
+              </p>
+            </div>
+          )}
+        </Card>
 
         {/* Active Bans */}
-        {server.bans && server.bans.length > 0 && (
-          <Card className="keynote-glass fade-in-keynote p-6">
-            <h2 className="font-mono text-lg font-semibold mb-4 flex items-center gap-2">
-              <Ban className="h-5 w-5" />
-              Active Bans
-            </h2>
+        <Card className="keynote-glass fade-in-keynote p-6">
+          <h2 className="font-mono text-lg font-semibold mb-4 flex items-center gap-2">
+            <Ban className="h-5 w-5" />
+            Active Bans
+            {server.bans && server.bans.length > 0 && (
+              <span className="font-mono text-xs text-muted-foreground ml-2">
+                ({server.bans.length})
+              </span>
+            )}
+          </h2>
+          {server.bans && server.bans.length > 0 ? (
             <div className="keynote-table overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -359,8 +379,18 @@ export default function ServerDetail() {
                 </TableBody>
               </Table>
             </div>
-          </Card>
-        )}
+          ) : (
+            <div className="text-center py-8">
+              <Ban className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <p className="font-mono text-muted-foreground">No active bans</p>
+              <p className="font-mono text-xs text-muted-foreground mt-2">
+                {server.bans === undefined 
+                  ? "Waiting for agent to send data..." 
+                  : "No IPs are currently banned"}
+              </p>
+            </div>
+          )}
+        </Card>
 
         {/* Log Tail */}
         {server.logTail && server.logTail.length > 0 && (
