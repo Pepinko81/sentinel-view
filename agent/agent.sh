@@ -4,7 +4,14 @@
 # Collects fail2ban status and pushes to HQ server
 #
 
+# Use set -euo pipefail but allow some commands to fail gracefully
 set -euo pipefail
+
+# Function to handle errors
+error_exit() {
+  echo "ERROR: $1" >&2
+  exit 1
+}
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
