@@ -150,6 +150,23 @@ export default function ServerDetail() {
   }
 
   const server = data.server;
+  
+  // Debug: Log server data to console
+  React.useEffect(() => {
+    if (server) {
+      console.log('[ServerDetail] Server data:', {
+        id: server.id,
+        name: server.name,
+        online: server.online,
+        jailsCount: server.jails?.length || 0,
+        bansCount: server.bans?.length || 0,
+        hasJails: !!server.jails,
+        hasBans: !!server.bans,
+        jails: server.jails,
+        bans: server.bans,
+      });
+    }
+  }, [server]);
 
   return (
     <MainLayout>
